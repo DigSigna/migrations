@@ -4,10 +4,10 @@ on:
   push:
     branches:
     - main
-    paths:
-    - "migrations/**"
-    - "Dockerfile"
-    - "scripts/**"
+    # paths:
+    # - "migrations/**"
+    # - "Dockerfile"
+    # - "scripts/**"
 
 jobs:
   build:
