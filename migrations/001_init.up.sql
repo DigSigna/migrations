@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX idx_users_tenant_id ON users(tenant_id);
 --seed data
-INSERT INTO digsigna_mvp.users (id,tenant_id,email,password_hash,first_name,last_name)
+INSERT INTO users (id,tenant_id,email,password_hash,first_name,last_name)
 	VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','admin@example.com','hashed_password','Admin','User');
 ON DUPLICATE KEY UPDATE email=email;
 
