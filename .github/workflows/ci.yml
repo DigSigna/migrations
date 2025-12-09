@@ -32,10 +32,10 @@ jobs:
 
     - name: Build Docker Image
       run: |
-        docker build -t ghcr.io/${{ toLower(github.repository) }}:${{ steps.vars.outputs.version }} -f Dockerfile .
-        docker tag ghcr.io/${{ toLower(github.repository) }}:${{ steps.vars.outputs.version }} ghcr.io/${{ toLower(github.repository) }}:latest
+        docker build -t ghcr.io/${{ github.repository }}:${{ steps.vars.outputs.version }} -f Dockerfile .
+        docker tag ghcr.io/${{ github.repository }}:${{ steps.vars.outputs.version }} ghcr.io/${{ github.repository }}:latest
 
     - name: Push to GHCR
       run: |
-        docker push ghcr.io/${{ toLower(github.repository) }}:${{ steps.vars.outputs.version }}
-        docker push ghcr.io/${{ toLower(github.repository) }}:latest
+        docker push ghcr.io/${{ github.repository }}:${{ steps.vars.outputs.version }}
+        docker push ghcr.io/${{ github.repository }}:latest
