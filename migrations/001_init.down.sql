@@ -1,7 +1,7 @@
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS tenants;
 DROP TABLE IF EXISTS key_metadata;
-DROP TABLE IF EXISTS keys;
+DROP TABLE IF EXISTS crypto_keys;
 DROP TABLE IF EXISTS identity_documents;
 DROP TABLE IF EXISTS certificates;
 DROP TABLE IF EXISTS signatures;

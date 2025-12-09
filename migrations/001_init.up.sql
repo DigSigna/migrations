@@ -28,8 +28,8 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX idx_users_tenant_id ON users(tenant_id);
 
--- Keys stored or managed by the HSM
-CREATE TABLE IF NOT EXISTS keys (
+-- crypto_keys stored or managed by the HSM
+CREATE TABLE IF NOT EXISTS crypto_keys (
     id VARCHAR(36) PRIMARY KEY,
     tenant_id VARCHAR(36) NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS keys (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
 
-CREATE INDEX idx_keys_tenant_id ON keys(tenant_id);
+CREATE INDEX idx_crypto_keys_tenant_id ON crypto_keys(tenant_id);
 
 
 -- Optional: key attributes (padding, curve, key_size)
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS key_metadata (
     meta_key VARCHAR(255) NOT NULL,
     meta_value VARCHAR(255),
 
-    FOREIGN KEY (key_id) REFERENCES keys(id)
+    FOREIGN KEY (key_id) REFERENCES crypto_keys(id)
 );
 
 CREATE TABLE IF NOT EXISTS identity_documents (
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS certificates (
 
     FOREIGN KEY (tenant_id) REFERENCES tenants(id),
     FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (key_id) REFERENCES keys(id)
+    FOREIGN KEY (key_id) REFERENCES crypto_keys(id)
 );
 
 CREATE INDEX idx_certificates_tenant ON certificates(tenant_id);
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS signing_requests (
 
     FOREIGN KEY (tenant_id) REFERENCES tenants(id),
     FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (key_id) REFERENCES keys(id)
+    FOREIGN KEY (key_id) REFERENCES crypto_keys(id)
 );
 
 CREATE INDEX idx_sign_req_tenant ON signing_requests(tenant_id);
@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS key_permissions (
     can_encrypt BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    FOREIGN KEY (key_id) REFERENCES keys(id),
+    FOREIGN KEY (key_id) REFERENCES crypto_keys(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
