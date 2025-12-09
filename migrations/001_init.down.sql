@@ -1,0 +1,11 @@
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS tenants;
+DROP TABLE IF EXISTS key_metadata;
+DROP TABLE IF EXISTS keys;
+DROP TABLE IF EXISTS identity_documents;
+DROP TABLE IF EXISTS certificates;
+DROP TABLE IF EXISTS signatures;
+DROP TABLE IF EXISTS signing_requests;
+DROP TABLE IF EXISTS verifications;
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS key_permissions;
