@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS tenants (
     contact_email VARCHAR(255),
     plan_type VARCHAR(50) DEFAULT 'BASIC',
     configuration JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- ============================================
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
     last_name VARCHAR(255),
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
@@ -38,6 +40,7 @@ CREATE TABLE IF NOT EXISTS crypto_keys (
     purpose VARCHAR(50),          -- SIGNING, ENCRYPTION
     is_hardware_backed BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
@@ -51,6 +54,8 @@ CREATE TABLE IF NOT EXISTS key_metadata (
     key_id VARCHAR(36) NOT NULL,
     meta_key VARCHAR(255) NOT NULL,
     meta_value VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (key_id) REFERENCES crypto_keys(id)
 );
@@ -64,6 +69,7 @@ CREATE TABLE IF NOT EXISTS identity_documents (
     issued_at DATE,
     expires_at DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (tenant_id) REFERENCES tenants(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -82,6 +88,7 @@ CREATE TABLE IF NOT EXISTS certificates (
     status VARCHAR(50) DEFAULT 'PENDING', -- PENDING, ISSUED, REVOKED
     expires_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (tenant_id) REFERENCES tenants(id),
     FOREIGN KEY (user_id) REFERENCES users(id),
@@ -98,6 +105,7 @@ CREATE TABLE IF NOT EXISTS signing_requests (
     document_hash VARCHAR(255) NOT NULL,
     status VARCHAR(50) DEFAULT 'PENDING', 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (tenant_id) REFERENCES tenants(id),
     FOREIGN KEY (user_id) REFERENCES users(id),
@@ -112,6 +120,7 @@ CREATE TABLE IF NOT EXISTS signatures (
     signing_request_id VARCHAR(36) NOT NULL,
     signature_base64 TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (signing_request_id) REFERENCES signing_requests(id)
 );
@@ -124,6 +133,7 @@ CREATE TABLE IF NOT EXISTS verifications (
     is_valid BOOLEAN,
     reason VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (tenant_id) REFERENCES tenants(id),
     FOREIGN KEY (signature_id) REFERENCES signatures(id)
@@ -138,6 +148,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     event VARCHAR(255) NOT NULL,
     payload JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (tenant_id) REFERENCES tenants(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -152,6 +163,7 @@ CREATE TABLE IF NOT EXISTS key_permissions (
     can_sign BOOLEAN DEFAULT FALSE,
     can_encrypt BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (key_id) REFERENCES crypto_keys(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
