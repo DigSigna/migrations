@@ -5,11 +5,16 @@ CREATE TABLE IF NOT EXISTS tenants (
     id VARCHAR(36) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     contact_email VARCHAR(255),
-    plan_type VARCHAR(50) DEFAULT 'BASIC',
+    plan_type VARCHAR(50) DEFAULT 'free',
+    status VARCHAR(50) DEFAULT 'active',
     configuration JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+-- seed data
+INSERT INTO tenants (id, name, contact_email, plan_type, status, configuration)
+VALUES ('00000000-0000-0000-0000-000000000001', 'Default Tenant', 'admin@example.com', 'free', 'active', '{}')
+ON DUPLICATE KEY UPDATE name=name;
 
 -- ============================================
 -- Users (shared across microservices)
@@ -29,6 +34,10 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX idx_users_tenant_id ON users(tenant_id);
+--seed data
+INSERT INTO users (id, tenant_id, email, password_hash, first_name, last_name, is_active)
+VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'admin@example.com', 'hashed_password', 'Admin', 'User', TRUE)
+ON DUPLICATE KEY UPDATE email=email;
 
 -- crypto_keys stored or managed by the HSM
 CREATE TABLE IF NOT EXISTS crypto_keys (
