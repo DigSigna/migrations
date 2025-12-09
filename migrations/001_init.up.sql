@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS verifications (
 CREATE INDEX idx_verif_tenant ON verifications(tenant_id);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
-    id VARCHAR(36) PRIMARY KEY,
+    id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
     tenant_id VARCHAR(36) NOT NULL,
     user_id VARCHAR(36),
     event VARCHAR(255) NOT NULL,
