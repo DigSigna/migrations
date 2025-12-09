@@ -156,6 +156,11 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     user_id VARCHAR(36),
     event VARCHAR(255) NOT NULL,
     payload JSON,
+    resource_id VARCHAR(36),
+    resource_type VARCHAR(100),
+    details TEXT,
+    ip_address VARCHAR(45),
+    user_agent VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
