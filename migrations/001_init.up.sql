@@ -12,7 +12,7 @@ CREATE DATABASE IF NOT EXISTS digsigna
 CHARACTER SET utf8mb4 
 COLLATE utf8mb4_unicode_ci;
 
-USE digsigna_mvp;
+USE digsigna;
 
 -- ============================================
 -- 1. TENANTS
