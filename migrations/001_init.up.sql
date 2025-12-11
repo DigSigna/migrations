@@ -481,7 +481,7 @@ CREATE INDEX idx_audit_success ON audit_logs(success, created_at);
 CREATE INDEX idx_audit_resource ON audit_logs(resource_type, resource_id);
 
 -- Índices para audit_metadata
-CREATE INDEX idx_audit_meta_key ON audit_metadata(meta_key, (CAST(meta_value AS CHAR(100))));
+CREATE INDEX idx_audit_meta_key ON audit_metadata(meta_key);
 
 -- Índices para otras tablas
 CREATE INDEX idx_users_tenant_status ON users(tenant_id, status);
@@ -491,7 +491,7 @@ CREATE INDEX idx_sessions_expires ON user_sessions(expires_at);
 CREATE INDEX idx_sessions_tenant ON user_sessions(tenant_id, revoked_at);
 CREATE INDEX idx_crypto_keys_tenant_active ON crypto_keys(tenant_id, is_active);
 CREATE INDEX idx_crypto_keys_algorithm ON crypto_keys(algorithm, key_size);
-CREATE INDEX idx_key_metadata_key ON key_metadata(meta_key, (CAST(meta_value AS CHAR(100))));
+CREATE INDEX idx_key_metadata_key ON key_metadata(meta_key);
 CREATE INDEX idx_key_ops_created ON key_operations(created_at DESC);
 CREATE INDEX idx_key_ops_key ON key_operations(key_id, created_at);
 CREATE INDEX idx_key_ops_tenant ON key_operations(tenant_id, operation_type);
@@ -565,7 +565,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- Vista: Claves activas por tenant
 CREATE OR REPLACE VIEW vw_active_keys AS
 SELECT 
-    tk.tenant_id,
+    t.id AS tenant_id,
     t.name AS tenant_name,
     COUNT(ck.id) AS total_keys,
     SUM(CASE WHEN ck.algorithm = 'RSA' THEN 1 ELSE 0 END) AS rsa_keys,
@@ -586,7 +586,7 @@ SELECT
     SUM(CASE WHEN success = TRUE THEN 1 ELSE 0 END) AS success_events,
     SUM(CASE WHEN success = FALSE THEN 1 ELSE 0 END) AS failed_events
 FROM audit_logs
-WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+WHERE created_at >= DATE_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
 GROUP BY DATE(created_at), service_name, event_action
 ORDER BY audit_date DESC, total_events DESC;
 
@@ -598,78 +598,53 @@ ORDER BY audit_date DESC, total_events DESC;
 DELIMITER //
 CREATE PROCEDURE sp_rotate_expired_keys()
 BEGIN
-    DECLARE done INT DEFAULT FALSE;
-    DECLARE v_key_id CHAR(36);
-    DECLARE v_tenant_id CHAR(36);
-    DECLARE v_name VARCHAR(255);
-    DECLARE v_algorithm VARCHAR(50);
-    DECLARE v_key_size INT;
-    DECLARE v_purpose VARCHAR(50);
+    DECLARE rows_affected INT DEFAULT 0;
     
-    DECLARE cur_expired CURSOR FOR 
-        SELECT id, tenant_id, name, algorithm, key_size, purpose
-        FROM crypto_keys 
-        WHERE expiration_date <= CURDATE() 
-          AND is_active = TRUE;
+    UPDATE crypto_keys 
+    SET is_active = FALSE, 
+        updated_at = CURRENT_TIMESTAMP(6)
+    WHERE expiration_date <= CURDATE() 
+      AND is_active = TRUE;
     
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+    SET rows_affected = ROW_COUNT();
     
-    OPEN cur_expired;
-    
-    read_loop: LOOP
-        FETCH cur_expired INTO v_key_id, v_tenant_id, v_name, v_algorithm, v_key_size, v_purpose;
-        IF done THEN
-            LEAVE read_loop;
-        END IF;
-        
-        -- Marcar clave como inactiva
-        UPDATE crypto_keys 
-        SET is_active = FALSE, 
-            updated_at = NOW(6)
-        WHERE id = v_key_id;
-        
-        -- Auditoría de la rotación
+    IF rows_affected > 0 THEN
         INSERT INTO audit_logs (
             service_name, event_type, event_action,
-            tenant_id, resource_id, resource_type,
             actor_type, actor_id, success,
             metadata
         ) VALUES (
             'hsm-service', 'SYSTEM', 'KEY_ROTATED',
-            v_tenant_id, v_key_id, 'CRYPTO_KEY',
             'SYSTEM', 'auto-rotation', TRUE,
-            JSON_OBJECT(
-                'reason', 'expired',
-                'old_key_id', v_key_id,
-                'algorithm', v_algorithm,
-                'key_size', v_key_size
-            )
+            JSON_OBJECT('keys_rotated', rows_affected)
         );
-        
-    END LOOP;
-    
-    CLOSE cur_expired;
+    END IF;
 END//
-DELIMITER ;
 
 -- Procedimiento: Limpieza de sesiones expiradas
-DELIMITER //
 CREATE PROCEDURE sp_cleanup_expired_sessions()
 BEGIN
+    DECLARE rows_affected INT DEFAULT 0;
+    
     DELETE FROM user_sessions 
     WHERE revoked_at IS NULL 
-      AND expires_at < NOW(6);
+      AND expires_at < CURRENT_TIMESTAMP(6);
     
-    INSERT INTO audit_logs (
-        service_name, event_type, event_action,
-        actor_type, actor_id, success,
-        metadata
-    ) VALUES (
-        'auth-service', 'SYSTEM', 'SESSION_CLEANUP',
-        'SYSTEM', 'cleanup-job', TRUE,
-        JSON_OBJECT('sessions_cleaned', ROW_COUNT())
-    );
+    SET rows_affected = ROW_COUNT();
+    
+    IF rows_affected > 0 THEN
+        INSERT INTO audit_logs (
+            service_name, event_type, event_action,
+            actor_type, actor_id, success,
+            metadata
+        ) VALUES (
+            'auth-service', 'SYSTEM', 'SESSION_CLEANUP',
+            'SYSTEM', 'cleanup-job', TRUE,
+            JSON_OBJECT('sessions_cleaned', rows_affected)
+        );
+    END IF;
 END//
+
 DELIMITER ;
 
 -- ============================================
@@ -690,16 +665,17 @@ DO
     CALL sp_cleanup_expired_sessions();
 
 -- Evento: Backup de auditoría (mantiene solo 90 días)
-CREATE EVENT IF NOT EXISTS ev_audit_log_cleanup
-ON SCHEDULE EVERY 1 DAY
-STARTS TIMESTAMP(CURRENT_DATE, '03:00:00')
-DO
-    DELETE FROM audit_logs 
-    WHERE created_at < DATE_SUB(NOW(6), INTERVAL 90 DAY);
+-- CREATE EVENT IF NOT EXISTS ev_audit_log_cleanup
+-- ON SCHEDULE EVERY 1 DAY
+-- STARTS TIMESTAMP(CURRENT_DATE, '03:00:00')
+-- DO
+--     DELETE FROM audit_logs 
+--     WHERE created_at < DATE_SUB(NOW(6), INTERVAL 90 DAY);
 
 -- ============================================
--- PERMISOS Y ROLES DE BASE DE DATOS
+-- PERMISOS Y ROLES DE BASE DE DATOS 
 -- ============================================
+-- TODO THIS MUST BE RUN BY A DIFFERENT JOB AND MIGRATION 
 
 -- Crear usuario de aplicación (ajusta la contraseña)
 CREATE USER IF NOT EXISTS 'digsigna_app'@'%' IDENTIFIED BY 'StrongPassword123!';
