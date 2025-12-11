@@ -8,7 +8,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ============================================
 -- CREAR BASE DE DATOS SI NO EXISTE
 -- ============================================
-CREATE DATABASE IF NOT EXISTS digsigna_mvp 
+CREATE DATABASE IF NOT EXISTS digsigna
 CHARACTER SET utf8mb4 
 COLLATE utf8mb4_unicode_ci;
 
@@ -464,7 +464,7 @@ CREATE TABLE key_permissions (
     FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     
-    UNIQUE KEY uk_key_permissions (key_id, user_id),
+    UNIQUE KEY uk_key_permissions (key_id, user_id)
 );
 
 -- ============================================
