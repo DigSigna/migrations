@@ -131,7 +131,7 @@ CREATE TABLE crypto_keys (
     purpose ENUM('SIGNING', 'ENCRYPTION', 'SIGN_AND_ENCRYPT') NOT NULL,
     
     -- Datos de clave
-    public_key TEXT,
+    public_key BLOB,
     key_handle VARCHAR(255),  -- Identificador en el HSM
     key_label VARCHAR(255),   -- Label en el HSM
     
@@ -382,7 +382,7 @@ CREATE TABLE signatures (
     certificate_id CHAR(36),
     
     -- Datos de la firma
-    signature_value TEXT NOT NULL,  -- Base64
+    signature_value BLOB NOT NULL,  -- Firma en binario
     signature_format ENUM('PKCS7', 'CMS', 'RAW', 'JWS') DEFAULT 'PKCS7',
     
     -- Timestamp
