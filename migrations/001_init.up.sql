@@ -104,7 +104,7 @@ CREATE TABLE users (
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
 
-    --department
+    -- Department
     department_id CHAR(36),
 
     FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
