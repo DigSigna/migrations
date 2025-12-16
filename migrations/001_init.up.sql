@@ -24,9 +24,55 @@ CREATE TABLE tenants (
     contact_email VARCHAR(255),
     plan_type ENUM('free', 'basic', 'professional', 'enterprise') DEFAULT 'free',
     status ENUM('active', 'suspended', 'pending', 'inactive') DEFAULT 'active',
+    hsm_slot INT NOT NULL,
     configuration JSON,
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
+);
+
+-- Tabla de Departamentos
+CREATE TABLE departments (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    tenant_id CHAR(36) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    UNIQUE(tenant_id, name) -- Nombre único por tenant
+);
+
+
+-- Tabla de Roles
+CREATE TABLE roles (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    tenant_id CHAR(36) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    is_system_role BOOLEAN DEFAULT FALSE, -- Para roles como 'Super Admin' del sistema
+    created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    UNIQUE(tenant_id, name) -- Nombre de rol único por tenant
+);
+
+-- Tabla de Permisos
+CREATE TABLE permissions (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    code VARCHAR(100) NOT NULL UNIQUE, -- Ej: 'document:sign', 'user:create'
+    description TEXT NOT NULL,
+    module VARCHAR(50) NOT NULL -- Agrupa permisos: 'HSM', 'Document', 'User', etc.
+);
+
+-- Tabla de relación Rol-Permiso
+CREATE TABLE role_permissions (
+    role_id CHAR(36) NOT NULL,
+    permission_id CHAR(36) NOT NULL,
+    granted_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (role_id, permission_id),
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
 );
 
 -- ============================================
@@ -47,8 +93,6 @@ CREATE TABLE users (
     external_id VARCHAR(255),
     identity_provider ENUM('local', 'google', 'azure_ad', 'okta') DEFAULT 'local',
     
-    -- Roles y permisos
-    role ENUM('SUPER_ADMIN', 'TENANT_ADMIN', 'USER', 'OPERATOR') DEFAULT 'USER',
     mfa_enabled BOOLEAN DEFAULT FALSE,
     
     -- Estado
@@ -59,11 +103,38 @@ CREATE TABLE users (
     created_by CHAR(36),
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    
+
+    --department
+    department_id CHAR(36),
+
+    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
     
     UNIQUE KEY uk_users_tenant_email (tenant_id, email)
+);
+
+-- Tabla de relación Usuario-Rol
+CREATE TABLE user_roles (
+    user_id CHAR(36) NOT NULL,
+    role_id CHAR(36) NOT NULL,
+    assigned_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+    assigned_by CHAR(36), -- ID del usuario que asignó el rol
+    PRIMARY KEY (user_id, role_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+    FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- Tabla de relación directa Usuario-Permiso (para sobreescribir)
+CREATE TABLE user_permissions (
+    user_id CHAR(36) NOT NULL,
+    permission_id CHAR(36) NOT NULL,
+    is_granted BOOLEAN NOT NULL DEFAULT TRUE, -- TRUE=grant, FALSE=deny
+    granted_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (user_id, permission_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
 );
 
 -- ============================================
