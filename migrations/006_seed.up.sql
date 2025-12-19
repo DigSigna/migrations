@@ -27,7 +27,7 @@ ON DUPLICATE KEY UPDATE
 -- 2. Tenant por defecto (debe existir ANTES de crear roles)
 INSERT INTO tenants (id, name, contact_email, plan_type, status, hsm_slot, configuration)
 VALUES (
-    'TEN00000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
     'DigSigna Platform',
     'admin@digsigna.com',
     'enterprise',
@@ -47,7 +47,7 @@ VALUES (
 INSERT INTO roles (id, tenant_id, name, description, is_system_role)
 VALUES (
     'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
-    'TEN00000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
     'Tenant Administrator',
     'Administrador con control total sobre el tenant y sus usuarios.',
     TRUE
@@ -59,7 +59,7 @@ VALUES (
 INSERT INTO roles (id, tenant_id, name, description, is_system_role)
 VALUES (
     'b1ffc99-9c0b-4ef8-bb6d-6bb9bd380a22',
-    'TEN00000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
     'Department Head',
     'Usuario con permisos para gestionar departamentos y sus usuarios.',
     FALSE
@@ -71,7 +71,7 @@ VALUES (
 INSERT INTO roles (id, tenant_id, name, description, is_system_role)
 VALUES (
     'c2eecc99-9c0b-4ef8-bb6d-6bb9bd380a33',
-    'TEN00000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
     'Signing User',
     'Usuario estándar que puede firmar y verificar documentos.',
     FALSE
@@ -88,7 +88,7 @@ SELECT
 FROM roles r
 CROSS JOIN permissions p
 WHERE r.name = 'Tenant Administrator' 
-    AND r.tenant_id = 'TEN00000-0000-0000-0000-000000000001'
+    AND r.tenant_id = '00000000-0000-0000-0000-000000000001'
 ON DUPLICATE KEY UPDATE role_id = VALUES(role_id);
 
 -- Para Department Head: permisos específicos
@@ -99,7 +99,7 @@ SELECT
 FROM roles r
 CROSS JOIN permissions p
 WHERE r.name = 'Department Head' 
-    AND r.tenant_id = 'TEN00000-0000-0000-0000-000000000001'
+    AND r.tenant_id = '00000000-0000-0000-0000-000000000001'
     AND p.code IN ('department:manage', 'user:read', 'user:create', 'user:update', 'document:sign', 'document:verify')
 ON DUPLICATE KEY UPDATE role_id = VALUES(role_id);
 
@@ -111,15 +111,15 @@ SELECT
 FROM roles r
 CROSS JOIN permissions p
 WHERE r.name = 'Signing User' 
-    AND r.tenant_id = 'TEN00000-0000-0000-0000-000000000001'
+    AND r.tenant_id = '00000000-0000-0000-0000-000000000001'
     AND p.code IN ('document:sign', 'document:verify', 'user:read')
 ON DUPLICATE KEY UPDATE role_id = VALUES(role_id);
 
 -- 5. Departamento por defecto
 INSERT INTO departments (id, tenant_id, name, description)
 VALUES (
-    'DEP00000-0000-0000-0000-000000000001',
-    'TEN00000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
     'Default Department',
     'Departamento predeterminado para usuarios sin asignación específica.'
 ) ON DUPLICATE KEY UPDATE 
@@ -132,8 +132,8 @@ INSERT INTO users (
     first_name, last_name, status, mfa_enabled
 )
 VALUES (
-    'USR00000-0000-0000-0000-000000000001',
-    'TEN00000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
     'admin@digsigna.com',
     -- Contraseña: 'Admin123!' (bcrypt)
     '$2a$10$N9qo8uLOickgx2ZMRZoMye3Y6l7dFg7/7gZ8J5J5J5J5J5J5J5J5J5',
@@ -150,7 +150,7 @@ VALUES (
 -- 7. Asignar rol de Tenant Administrator al usuario administrador
 INSERT INTO user_roles (user_id, role_id)
 VALUES (
-    'USR00000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
     'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'
 ) ON DUPLICATE KEY UPDATE
     user_id = VALUES(user_id);
@@ -161,8 +161,8 @@ INSERT INTO users (
     first_name, last_name, status, mfa_enabled, department_id
 )
 VALUES (
-    'USR00000-0000-0000-0000-000000000002',
-    'TEN00000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000002',
+    '00000000-0000-0000-0000-000000000001',
     'admindep@signa.com',
     -- Contraseña: 'Admin123!' (bcrypt)
     '$2a$10$N9qo8uLOickgx2ZMRZoMye3Y6l7dFg7/7gZ8J5J5J5J5J5J5J5J5J5',
@@ -170,7 +170,7 @@ VALUES (
     'Administrator',
     'ACTIVE',
     FALSE,
-    'DEP00000-0000-0000-0000-000000000001'
+    '00000000-0000-0000-0000-000000000001'
 ) ON DUPLICATE KEY UPDATE 
     email = VALUES(email),
     first_name = VALUES(first_name),
@@ -180,7 +180,7 @@ VALUES (
 -- 9. Asignar rol de Department Head al usuario jefe de departamento
 INSERT INTO user_roles (user_id, role_id)
 VALUES (
-    'USR00000-0000-0000-0000-000000000002',
+    '00000000-0000-0000-0000-000000000002',
     'b1ffc99-9c0b-4ef8-bb6d-6bb9bd380a22'
 ) ON DUPLICATE KEY UPDATE
     user_id = VALUES(user_id);
@@ -191,8 +191,8 @@ INSERT INTO users (
     first_name, last_name, status, mfa_enabled
 )
 VALUES (
-    'USR00000-0000-0000-0000-000000000003',
-    'TEN00000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000003',
+    '00000000-0000-0000-0000-000000000001',
     'signer@example.com',
     -- Contraseña: 'User123!' (bcrypt)
     '$2a$10$N9qo8uLOickgx2ZMRZoMye3Y6l7dFg7/7gZ8J5J5J5J5J5J5J5J5J5',
@@ -208,7 +208,7 @@ VALUES (
 -- 11. Asignar rol de Signing User
 INSERT INTO user_roles (user_id, role_id)
 VALUES (
-    'USR00000-0000-0000-0000-000000000003',
+    '00000000-0000-0000-0000-000000000003',
     'c2eecc99-9c0b-4ef8-bb6d-6bb9bd380a33'
 ) ON DUPLICATE KEY UPDATE
     user_id = VALUES(user_id);
