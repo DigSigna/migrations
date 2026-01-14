@@ -28,7 +28,7 @@ CREATE TABLE tenants (
     configuration JSON,
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tabla de Departamentos
 CREATE TABLE departments (
@@ -42,7 +42,7 @@ CREATE TABLE departments (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     
     UNIQUE(tenant_id, name) -- Nombre único por tenant
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 -- Tabla de Roles
@@ -55,7 +55,7 @@ CREATE TABLE roles (
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     UNIQUE(tenant_id, name) -- Nombre de rol único por tenant
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tabla de Permisos
 CREATE TABLE permissions (
@@ -63,7 +63,7 @@ CREATE TABLE permissions (
     code VARCHAR(100) NOT NULL UNIQUE, -- Ej: 'document:sign', 'user:create'
     description TEXT NOT NULL,
     module VARCHAR(50) NOT NULL -- Agrupa permisos: 'HSM', 'Document', 'User', etc.
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tabla de relación Rol-Permiso
 CREATE TABLE role_permissions (
@@ -73,7 +73,7 @@ CREATE TABLE role_permissions (
     PRIMARY KEY (role_id, permission_id),
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
     FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
 -- 2. USERS
@@ -112,7 +112,7 @@ CREATE TABLE users (
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
     
     UNIQUE KEY uk_users_tenant_email (tenant_id, email)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tabla de relación Usuario-Rol
 CREATE TABLE user_roles (
@@ -124,7 +124,7 @@ CREATE TABLE user_roles (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
     FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tabla de relación directa Usuario-Permiso (para sobreescribir)
 CREATE TABLE user_permissions (
@@ -135,7 +135,7 @@ CREATE TABLE user_permissions (
     PRIMARY KEY (user_id, permission_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
 -- 3. AUDIT_LOGS - Auditoría del sistema (MEJORADA)
@@ -224,7 +224,7 @@ CREATE TABLE crypto_keys (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     
     UNIQUE KEY uk_crypto_keys_tenant_name (tenant_id, name)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
 -- 5. AUDIT_METADATA - Metadata adicional de auditoría (opcional)
@@ -273,7 +273,7 @@ CREATE TABLE user_sessions (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     
     UNIQUE KEY uk_session_token (session_token)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 
@@ -292,7 +292,7 @@ CREATE TABLE key_metadata (
     FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE CASCADE,
     
     UNIQUE KEY uk_key_metadata_key (key_id, meta_key)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
 -- 8. KEY_OPERATIONS - Operaciones con claves (opcional, para auditoría detallada)
@@ -326,7 +326,7 @@ CREATE TABLE key_operations (
     FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE CASCADE,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     FOREIGN KEY (initiated_by) REFERENCES users(id) ON DELETE SET NULL
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
 -- 9. CERTIFICATES - Certificados digitales
@@ -371,7 +371,7 @@ CREATE TABLE certificates (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE CASCADE,
     FOREIGN KEY (issuer_certificate_id) REFERENCES certificates(id) ON DELETE SET NULL
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
 -- 10. IDENTITY_DOCUMENTS
@@ -405,7 +405,7 @@ CREATE TABLE identity_documents (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     
     UNIQUE KEY uk_identity_docs_user_type (user_id, type)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
 -- 11. SIGNING_REQUESTS - Solicitudes de firma
@@ -440,7 +440,7 @@ CREATE TABLE signing_requests (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE SET NULL
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
 -- 12. SIGNATURES - Firmas digitales
@@ -473,7 +473,7 @@ CREATE TABLE signatures (
     FOREIGN KEY (certificate_id) REFERENCES certificates(id) ON DELETE SET NULL,
     
     UNIQUE KEY uk_signature_request (signing_request_id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
 -- 13. VERIFICATIONS - Verificaciones de firmas
@@ -507,7 +507,7 @@ CREATE TABLE verifications (
     FOREIGN KEY (signature_id) REFERENCES signatures(id) ON DELETE SET NULL,
     FOREIGN KEY (certificate_id) REFERENCES certificates(id) ON DELETE SET NULL,
     FOREIGN KEY (verifier_user_id) REFERENCES users(id) ON DELETE SET NULL
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 -- ============================================
@@ -536,7 +536,7 @@ CREATE TABLE key_permissions (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     
     UNIQUE KEY uk_key_permissions (key_id, user_id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 -- ============================================
@@ -600,9 +600,7 @@ CREATE TABLE tenant_usage (
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     
-    UNIQUE KEY uk_tenant_usage_type (tenant_id, quota_type),
-    
-    INDEX idx_usage_tenant_type (tenant_id, quota_type)
+    UNIQUE KEY uk_tenant_usage_type (tenant_id, quota_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
@@ -633,12 +631,9 @@ CREATE TABLE tenant_usage_history (
     
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-    
-    INDEX idx_usage_history_tenant (tenant_id, created_at DESC),
-    INDEX idx_usage_history_type (quota_type, created_at DESC),
-    INDEX idx_usage_history_resource (resource_type, resource_id)
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ============================================
 -- CREAR ÍNDICES
 -- ============================================
@@ -683,6 +678,13 @@ CREATE INDEX idx_verifications_document ON verifications(document_hash);
 CREATE INDEX idx_key_permissions_user ON key_permissions(user_id, valid_to);
 CREATE INDEX idx_key_permissions_validity ON key_permissions(valid_to);
 
+-- Índices para tablas de cuotas
+CREATE INDEX idx_tenant_quota_active ON tenant_quotas(tenant_id, is_active);
+CREATE INDEX idx_tenant_quota_type ON tenant_quotas(quota_type, is_active);
+CREATE INDEX idx_tenant_usage_type ON tenant_usage(tenant_id, quota_type);
+CREATE INDEX idx_usage_history_tenant ON tenant_usage_history(tenant_id, created_at DESC);
+CREATE INDEX idx_usage_history_type ON tenant_usage_history(quota_type, created_at DESC);
+CREATE INDEX idx_usage_history_resource ON tenant_usage_history(resource_type, resource_id);
 
 -- Habilitar FK nuevamente
 SET FOREIGN_KEY_CHECKS = 1;
