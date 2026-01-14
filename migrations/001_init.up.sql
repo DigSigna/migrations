@@ -19,7 +19,7 @@ USE digsigna;
 -- ============================================
 DROP TABLE IF EXISTS tenants;
 CREATE TABLE tenants (
-    id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY DEFAULT (UUID()),
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     name VARCHAR(255) NOT NULL,
     contact_email VARCHAR(255),
     plan_type ENUM('free', 'basic', 'professional', 'enterprise') DEFAULT 'free',
@@ -28,12 +28,12 @@ CREATE TABLE tenants (
     configuration JSON,
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
 
 -- Tabla de Departamentos
 CREATE TABLE departments (
-    id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY DEFAULT (UUID()),
-    tenant_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    tenant_id CHAR(36) NOT NULL,
     name VARCHAR(255) NOT NULL,
     description TEXT,
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
@@ -42,46 +42,46 @@ CREATE TABLE departments (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     
     UNIQUE(tenant_id, name) -- Nombre único por tenant
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
 
 
 -- Tabla de Roles
 CREATE TABLE roles (
-    id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY DEFAULT (UUID()),
-    tenant_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    tenant_id CHAR(36) NOT NULL,
     name VARCHAR(100) NOT NULL,
     description TEXT,
     is_system_role BOOLEAN DEFAULT FALSE, -- Para roles como 'Super Admin' del sistema
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     UNIQUE(tenant_id, name) -- Nombre de rol único por tenant
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
 
 -- Tabla de Permisos
 CREATE TABLE permissions (
-    id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY DEFAULT (UUID()),
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     code VARCHAR(100) NOT NULL UNIQUE, -- Ej: 'document:sign', 'user:create'
     description TEXT NOT NULL,
     module VARCHAR(50) NOT NULL -- Agrupa permisos: 'HSM', 'Document', 'User', etc.
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
 
 -- Tabla de relación Rol-Permiso
 CREATE TABLE role_permissions (
-    role_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-    permission_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    role_id CHAR(36) NOT NULL,
+    permission_id CHAR(36) NOT NULL,
     granted_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     PRIMARY KEY (role_id, permission_id),
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
     FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
 
 -- ============================================
 -- 2. USERS
 -- ============================================
 DROP TABLE IF EXISTS users;
 CREATE TABLE users (
-    id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY DEFAULT (UUID()),
-    tenant_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    tenant_id CHAR(36) NOT NULL,
     email VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255),
     
@@ -100,42 +100,42 @@ CREATE TABLE users (
     last_login_at TIMESTAMP(6) NULL,
     
     -- Auditoría
-    created_by CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    created_by CHAR(36),
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
 
     -- Department
-    department_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    department_id CHAR(36),
 
     FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
     
     UNIQUE KEY uk_users_tenant_email (tenant_id, email)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
 
 -- Tabla de relación Usuario-Rol
 CREATE TABLE user_roles (
-    user_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-    role_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    role_id CHAR(36) NOT NULL,
     assigned_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
-    assigned_by CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci, -- ID del usuario que asignó el rol
+    assigned_by CHAR(36), -- ID del usuario que asignó el rol
     PRIMARY KEY (user_id, role_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
     FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
 
 -- Tabla de relación directa Usuario-Permiso (para sobreescribir)
 CREATE TABLE user_permissions (
-    user_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-    permission_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    permission_id CHAR(36) NOT NULL,
     is_granted BOOLEAN NOT NULL DEFAULT TRUE, -- TRUE=grant, FALSE=deny
     granted_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     PRIMARY KEY (user_id, permission_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
 
 -- ============================================
 -- 3. AUDIT_LOGS - Auditoría del sistema (MEJORADA)
@@ -543,8 +543,8 @@ CREATE TABLE key_permissions (
 -- TENANT_QUOTAS - Cuotas y límites por tenant
 -- ============================================
 CREATE TABLE tenant_quotas (
-    id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY DEFAULT (UUID()),
-    tenant_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    tenant_id CHAR(36) NOT NULL,
     
     -- Tipo de cuota
     quota_type ENUM(
@@ -581,8 +581,8 @@ CREATE TABLE tenant_quotas (
 -- TENANT_USAGE - Consumo en tiempo real
 -- ============================================
 CREATE TABLE tenant_usage (
-    id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY DEFAULT (UUID()),
-    tenant_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    tenant_id CHAR(36) NOT NULL,
     quota_type ENUM(
         'USERS', 'KEYS', 'SIGNATURES', 'VERIFICATIONS',
         'STORAGE_MB', 'API_CALLS', 'CERTIFICATES'
@@ -609,8 +609,8 @@ CREATE TABLE tenant_usage (
 -- TENANT_USAGE_HISTORY - Auditoría de consumo
 -- ============================================
 CREATE TABLE tenant_usage_history (
-    id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY DEFAULT (UUID()),
-    tenant_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    tenant_id CHAR(36) NOT NULL,
     quota_type ENUM(
         'USERS', 'KEYS', 'SIGNATURES', 'VERIFICATIONS',
         'STORAGE_MB', 'API_CALLS', 'CERTIFICATES'
@@ -623,9 +623,9 @@ CREATE TABLE tenant_usage_history (
     delta INT NOT NULL,  -- Diferencia (+/-)
     
     -- Contexto
-    resource_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,      -- ID del recurso que causó el cambio
+    resource_id CHAR(36),      -- ID del recurso que causó el cambio
     resource_type VARCHAR(50), -- Tipo: 'KEY', 'SIGNATURE', 'USER', etc.
-    user_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    user_id CHAR(36),
     
     -- Límite alcanzado
     limit_reached BOOLEAN DEFAULT FALSE,
