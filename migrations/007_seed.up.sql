@@ -212,3 +212,36 @@ VALUES (
     'c2eecc99-9c0b-4ef8-bb6d-6bb9bd380a33'
 ) ON DUPLICATE KEY UPDATE
     user_id = VALUES(user_id);
+-- ============================================
+-- 12. CUOTAS DEL TENANT POR DEFECTO (Enterprise)
+-- ============================================
+INSERT INTO tenant_quotas (tenant_id, quota_type, max_limit, warning_threshold, reset_period)
+VALUES 
+    -- Sin límites para plan enterprise
+    ('00000000-0000-0000-0000-000000000001', 'USERS', -1, 0, 'NONE'),
+    ('00000000-0000-0000-0000-000000000001', 'KEYS', -1, 0, 'NONE'),
+    ('00000000-0000-0000-0000-000000000001', 'SIGNATURES', -1, 0, 'NONE'),
+    ('00000000-0000-0000-0000-000000000001', 'VERIFICATIONS', -1, 0, 'NONE'),
+    ('00000000-0000-0000-0000-000000000001', 'STORAGE_MB', -1, 0, 'NONE'),
+    ('00000000-0000-0000-0000-000000000001', 'API_CALLS', -1, 0, 'NONE'),
+    ('00000000-0000-0000-0000-000000000001', 'CERTIFICATES', -1, 0, 'NONE')
+ON DUPLICATE KEY UPDATE
+    max_limit = VALUES(max_limit),
+    warning_threshold = VALUES(warning_threshold),
+    reset_period = VALUES(reset_period);
+
+-- ============================================
+-- 13. INICIALIZAR CONTADORES DE USO
+-- ============================================
+INSERT INTO tenant_usage (tenant_id, quota_type, current_usage, period_usage)
+VALUES 
+    ('00000000-0000-0000-0000-000000000001', 'USERS', 3, 3),           -- 3 usuarios creados
+    ('00000000-0000-0000-0000-000000000001', 'KEYS', 0, 0),
+    ('00000000-0000-0000-0000-000000000001', 'SIGNATURES', 0, 0),
+    ('00000000-0000-0000-0000-000000000001', 'VERIFICATIONS', 0, 0),
+    ('00000000-0000-0000-0000-000000000001', 'STORAGE_MB', 0, 0),
+    ('00000000-0000-0000-0000-000000000001', 'API_CALLS', 0, 0),
+    ('00000000-0000-0000-0000-000000000001', 'CERTIFICATES', 0, 0)
+ON DUPLICATE KEY UPDATE
+    current_usage = VALUES(current_usage),
+    period_usage = VALUES(period_usage);
