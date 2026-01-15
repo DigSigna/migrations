@@ -710,15 +710,15 @@ ON DUPLICATE KEY UPDATE
     max_limit = VALUES(max_limit);
 
 -- 36. Uso actual de Celaya (datos de ejemplo)
-INSERT INTO tenant_usage (tenant_id, quota_type, current_usage, period_usage, last_reset_at)
+INSERT INTO tenant_usage (tenant_id, quota_type, current_usage, period_usage)
 VALUES 
-    ('20000000-2000-2000-2000-000000000001', 'USERS', 4, 4, NULL),              -- 4 usuarios creados
-    ('20000000-2000-2000-2000-000000000001', 'KEYS', 8, 8, NULL),               -- 8 claves generadas
-    ('20000000-2000-2000-2000-000000000001', 'SIGNATURES', 127, 127, '2026-01-01'),  -- 127 firmas en enero
-    ('20000000-2000-2000-2000-000000000001', 'VERIFICATIONS', 89, 89, '2026-01-01'), -- 89 verificaciones
-    ('20000000-2000-2000-2000-000000000001', 'STORAGE_MB', 234, 234, NULL),     -- 234 MB usados
-    ('20000000-2000-2000-2000-000000000001', 'API_CALLS', 1842, 1842, '2026-01-01'), -- 1,842 llamadas API
-    ('20000000-2000-2000-2000-000000000001', 'CERTIFICATES', 8, 8, NULL)        -- 8 certificados
+    ('20000000-2000-2000-2000-000000000001', 'USERS', 4, 4),              -- 4 usuarios creados
+    ('20000000-2000-2000-2000-000000000001', 'KEYS', 8, 8),               -- 8 claves generadas
+    ('20000000-2000-2000-2000-000000000001', 'SIGNATURES', 127, 127),     -- 127 firmas en enero
+    ('20000000-2000-2000-2000-000000000001', 'VERIFICATIONS', 89, 89),    -- 89 verificaciones
+    ('20000000-2000-2000-2000-000000000001', 'STORAGE_MB', 234, 234),     -- 234 MB usados
+    ('20000000-2000-2000-2000-000000000001', 'API_CALLS', 1842, 1842),    -- 1,842 llamadas API
+    ('20000000-2000-2000-2000-000000000001', 'CERTIFICATES', 8, 8)        -- 8 certificados
 ON DUPLICATE KEY UPDATE
     current_usage = VALUES(current_usage),
     period_usage = VALUES(period_usage);
