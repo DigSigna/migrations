@@ -15,6 +15,12 @@ DROP TRIGGER IF EXISTS trg_validate_organization_for_key;
 DROP TRIGGER IF EXISTS trg_prevent_delete_key_with_children;
 
 -- Eliminar tablas en orden inverso
+DROP TABLE IF EXISTS payments;
+DROP TABLE IF EXISTS invoices;
+DROP TABLE IF EXISTS subscription_history;
+DROP TABLE IF EXISTS tenant_subscriptions;
+DROP TABLE IF EXISTS plan_features;
+DROP TABLE IF EXISTS plans;
 DROP TABLE IF EXISTS tenant_usage_history;
 DROP TABLE IF EXISTS tenant_usage;
 DROP TABLE IF EXISTS tenant_quotas;
