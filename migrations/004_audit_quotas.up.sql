@@ -131,6 +131,7 @@ CREATE TABLE tenant_usage (
     
     last_increment_at TIMESTAMP(6),
     last_decrement_at TIMESTAMP(6),
+    last_reset_at TIMESTAMP(6),  -- Cuándo se reinició el período (para MONTHLY)
     
     updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     

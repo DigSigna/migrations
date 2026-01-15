@@ -710,32 +710,32 @@ ON DUPLICATE KEY UPDATE
     max_limit = VALUES(max_limit);
 
 -- 36. Uso actual de Celaya (datos de ejemplo)
-INSERT INTO tenant_usage (tenant_id, quota_type, current_usage, period_usage)
+INSERT INTO tenant_usage (tenant_id, quota_type, current_usage, period_usage, last_reset_at)
 VALUES 
-    ('20000000-2000-2000-2000-000000000001', 'USERS', 4, 4),              -- 4 usuarios creados
-    ('20000000-2000-2000-2000-000000000001', 'KEYS', 8, 8),               -- 8 claves generadas
-    ('20000000-2000-2000-2000-000000000001', 'SIGNATURES', 127, 127),     -- 127 firmas en enero
-    ('20000000-2000-2000-2000-000000000001', 'VERIFICATIONS', 89, 89),    -- 89 verificaciones
-    ('20000000-2000-2000-2000-000000000001', 'STORAGE_MB', 234, 234),     -- 234 MB usados
-    ('20000000-2000-2000-2000-000000000001', 'API_CALLS', 1842, 1842),    -- 1,842 llamadas API
-    ('20000000-2000-2000-2000-000000000001', 'CERTIFICATES', 8, 8)        -- 8 certificados
+    ('20000000-2000-2000-2000-000000000001', 'USERS', 4, 4, NULL),              -- 4 usuarios creados
+    ('20000000-2000-2000-2000-000000000001', 'KEYS', 8, 8, NULL),               -- 8 claves generadas
+    ('20000000-2000-2000-2000-000000000001', 'SIGNATURES', 127, 127, '2026-01-01 00:00:00'),     -- 127 firmas en enero
+    ('20000000-2000-2000-2000-000000000001', 'VERIFICATIONS', 89, 89, '2026-01-01 00:00:00'),    -- 89 verificaciones
+    ('20000000-2000-2000-2000-000000000001', 'STORAGE_MB', 234, 234, NULL),     -- 234 MB usados
+    ('20000000-2000-2000-2000-000000000001', 'API_CALLS', 1842, 1842, '2026-01-01 00:00:00'),    -- 1,842 llamadas API
+    ('20000000-2000-2000-2000-000000000001', 'CERTIFICATES', 8, 8, NULL)        -- 8 certificados
 ON DUPLICATE KEY UPDATE
     current_usage = VALUES(current_usage),
     period_usage = VALUES(period_usage);
 
 -- 37. Historial de uso - Evento inicial de activación
 INSERT INTO tenant_usage_history (
-    tenant_id, quota_type, change_type, change_amount, 
-    previous_usage, new_usage, reference_type, reference_id, reason
+    tenant_id, quota_type, action, delta, 
+    previous_value, new_value, resource_type, resource_id
 )
 VALUES 
     ('20000000-2000-2000-2000-000000000001', 'USERS', 'INCREMENT', 4, 0, 4, 
-     'USER', '20000000-2000-2000-2000-000000000104', 'Creación inicial de usuarios del municipio'),
+     'USER', '20000000-2000-2000-2000-000000000104'),
     ('20000000-2000-2000-2000-000000000001', 'KEYS', 'INCREMENT', 8, 0, 8, 
-     'KEY', NULL, 'Generación de claves iniciales para departamentos'),
+     'KEY', NULL),
     ('20000000-2000-2000-2000-000000000001', 'SIGNATURES', 'INCREMENT', 127, 0, 127, 
-     'SIGNATURE', NULL, 'Firmas de permisos de construcción - Enero 2026'),
+     'SIGNATURE', NULL),
     ('20000000-2000-2000-2000-000000000001', 'CERTIFICATES', 'INCREMENT', 8, 0, 8, 
-     'CERTIFICATE', NULL, 'Emisión de certificados para departamentos')
+     'CERTIFICATE', NULL)
 ON DUPLICATE KEY UPDATE
-    new_usage = VALUES(new_usage);
+    new_value = VALUES(new_value);
