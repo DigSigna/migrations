@@ -26,8 +26,8 @@ WHERE id IN (
     '00000000-0000-0000-0000-000000000003'
 );
 
--- Eliminar departamento
-DELETE FROM departments 
+-- Eliminar organización
+DELETE FROM organizations 
 WHERE id = '00000000-0000-0000-0000-000000000001';
 
 -- Eliminar permisos de roles

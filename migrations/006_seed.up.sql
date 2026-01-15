@@ -11,8 +11,8 @@ INSERT INTO permissions (code, description, module) VALUES
 ('user:read',   'Ver información de usuarios', 'User'),
 ('user:update', 'Actualizar usuarios', 'User'),
 ('user:delete', 'Eliminar usuarios', 'User'),
--- Módulo de Departamento
-('department:manage', 'Gestionar departamentos', 'Department'),
+-- Módulo de Organización
+('organization:manage', 'Gestionar organizaciones', 'Organization'),
 -- Módulo de HSM y Firma
 ('hsm:key:generate', 'Generar nuevas claves HSM', 'HSM'),
 ('document:sign',    'Firmar documentos', 'Document'),
@@ -24,19 +24,22 @@ ON DUPLICATE KEY UPDATE
     description = VALUES(description),
     module = VALUES(module);
 
--- 2. Tenant por defecto (debe existir ANTES de crear roles)
-INSERT INTO tenants (id, name, contact_email, plan_type, status, hsm_slot, configuration)
+-- 2. Tenant Platform (MANAGED - modo=MANAGED, hsm_slot=0)
+INSERT INTO tenants (id, name, contact_email, mode, plan_type, status, hsm_slot, parent_tenant_id, configuration)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
     'DigSigna Platform',
     'admin@digsigna.com',
+    'MANAGED',
     'enterprise',
     'active',
     0,
-    '{"max_users": 100, "max_keys": 1000, "features": ["hsm", "audit", "multi_tenant"]}'
+    NULL,  -- Es el tenant raíz
+    '{"max_users": -1, "max_keys": -1, "features": ["hsm", "audit", "multi_tenant", "pki_hierarchy"]}'
 ) ON DUPLICATE KEY UPDATE 
     name = VALUES(name),
     contact_email = VALUES(contact_email),
+    mode = VALUES(mode),
     plan_type = VALUES(plan_type),
     status = VALUES(status),
     hsm_slot = VALUES(hsm_slot),
@@ -55,13 +58,13 @@ VALUES (
     name = VALUES(name),
     description = VALUES(description);
 
--- Rol: Department Head  
+-- Rol: Organization Manager
 INSERT INTO roles (id, tenant_id, name, description, is_system_role)
 VALUES (
     'b1ffc99-9c0b-4ef8-bb6d-6bb9bd380a22',
     '00000000-0000-0000-0000-000000000001',
-    'Department Head',
-    'Usuario con permisos para gestionar departamentos y sus usuarios.',
+    'Organization Manager',
+    'Usuario con permisos para gestionar organizaciones y sus usuarios.',
     FALSE
 ) ON DUPLICATE KEY UPDATE
     name = VALUES(name),
@@ -91,16 +94,16 @@ WHERE r.name = 'Tenant Administrator'
     AND r.tenant_id = '00000000-0000-0000-0000-000000000001'
 ON DUPLICATE KEY UPDATE role_id = VALUES(role_id);
 
--- Para Department Head: permisos específicos
+-- Para Organization Manager: permisos específicos
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT 
     r.id,
     p.id
 FROM roles r
 CROSS JOIN permissions p
-WHERE r.name = 'Department Head' 
+WHERE r.name = 'Organization Manager' 
     AND r.tenant_id = '00000000-0000-0000-0000-000000000001'
-    AND p.code IN ('department:manage', 'user:read', 'user:create', 'user:update', 'document:sign', 'document:verify')
+    AND p.code IN ('organization:manage', 'user:read', 'user:create', 'user:update', 'document:sign', 'document:verify')
 ON DUPLICATE KEY UPDATE role_id = VALUES(role_id);
 
 -- Para Signing User: permisos básicos
@@ -115,13 +118,18 @@ WHERE r.name = 'Signing User'
     AND p.code IN ('document:sign', 'document:verify', 'user:read')
 ON DUPLICATE KEY UPDATE role_id = VALUES(role_id);
 
--- 5. Departamento por defecto
-INSERT INTO departments (id, tenant_id, name, description)
+-- 5. Organización por defecto (tipo DEPARTMENT)
+INSERT INTO organizations (id, tenant_id, parent_id, type, name, legal_name, description, level, status)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
     '00000000-0000-0000-0000-000000000001',
+    NULL,
+    'DEPARTMENT',
     'Default Department',
-    'Departamento predeterminado para usuarios sin asignación específica.'
+    'Default Department',
+    'Organización predeterminada para usuarios sin asignación específica.',
+    0,
+    'ACTIVE'
 ) ON DUPLICATE KEY UPDATE 
     name = VALUES(name),
     description = VALUES(description);
@@ -155,29 +163,29 @@ VALUES (
 ) ON DUPLICATE KEY UPDATE
     user_id = VALUES(user_id);
 
--- 8. Usuario Jefe de Departamento
+-- 8. Usuario Gestor de Organización
 INSERT INTO users (
-    id, tenant_id, email, password_hash, 
-    first_name, last_name, status, mfa_enabled, department_id
+    id, tenant_id, organization_id, email, password_hash, 
+    first_name, last_name, status, mfa_enabled
 )
 VALUES (
     '00000000-0000-0000-0000-000000000002',
     '00000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
     'admindep@signa.com',
     -- Contraseña: 'Admin123!' (bcrypt)
     '$2a$10$N9qo8uLOickgx2ZMRZoMye3Y6l7dFg7/7gZ8J5J5J5J5J5J5J5J5J5',
-    'Department',
-    'Administrator',
+    'Organization',
+    'Manager',
     'ACTIVE',
-    FALSE,
-    '00000000-0000-0000-0000-000000000001'
+    FALSE
 ) ON DUPLICATE KEY UPDATE 
     email = VALUES(email),
     first_name = VALUES(first_name),
     last_name = VALUES(last_name),
-    department_id = VALUES(department_id);
+    organization_id = VALUES(organization_id);
 
--- 9. Asignar rol de Department Head al usuario jefe de departamento
+-- 9. Asignar rol de Organization Manager al usuario gestor
 INSERT INTO user_roles (user_id, role_id)
 VALUES (
     '00000000-0000-0000-0000-000000000002',
@@ -185,7 +193,7 @@ VALUES (
 ) ON DUPLICATE KEY UPDATE
     user_id = VALUES(user_id);
 
--- 10. Usuario Signing User (sin departamento asignado - ejemplo flat hierarchy)
+-- 10. Usuario Signing User (sin organización asignada - ejemplo flat hierarchy)
 INSERT INTO users (
     id, tenant_id, email, password_hash, 
     first_name, last_name, status, mfa_enabled
@@ -217,7 +225,7 @@ VALUES (
 -- ============================================
 INSERT INTO tenant_quotas (tenant_id, quota_type, max_limit, warning_threshold, reset_period)
 VALUES 
-    -- Sin l�mites para plan enterprise
+    -- Sin l�mites para plan enterprise
     ('00000000-0000-0000-0000-000000000001', 'USERS', -1, 0, 'NONE'),
     ('00000000-0000-0000-0000-000000000001', 'KEYS', -1, 0, 'NONE'),
     ('00000000-0000-0000-0000-000000000001', 'SIGNATURES', -1, 0, 'NONE'),

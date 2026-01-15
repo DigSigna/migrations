@@ -15,33 +15,83 @@ COLLATE utf8mb4_unicode_ci;
 USE digsigna;
 
 -- ============================================
--- 1. TENANTS
+-- 1. TENANTS - Modelo Híbrido (Managed + Independent)
 -- ============================================
 DROP TABLE IF EXISTS tenants;
 CREATE TABLE tenants (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     name VARCHAR(255) NOT NULL,
     contact_email VARCHAR(255),
-    plan_type ENUM('free', 'basic', 'professional', 'enterprise') DEFAULT 'free',
+    
+    -- Modo de operación (HÍBRIDO)
+    mode ENUM('MANAGED', 'INDEPENDENT') DEFAULT 'MANAGED' COMMENT 'MANAGED: CA bajo DigSigna Root (slot 0). INDEPENDENT: Root CA propio (slot dedicado)',
+    
+    -- Plan y tipo
+    plan_type ENUM('free', 'basic', 'professional', 'enterprise', 'white_label', 'custom') DEFAULT 'free',
     status ENUM('active', 'suspended', 'pending', 'inactive') DEFAULT 'active',
+    
+    -- HSM Slot
+    -- MANAGED: usa slot 0 (compartido)
+    -- INDEPENDENT: usa slot > 0 (dedicado)
     hsm_slot INT NOT NULL,
+    
+    -- Relación con tenant padre (solo para INDEPENDENT)
+    parent_tenant_id CHAR(36) COMMENT 'Referencia al tenant plataforma. NULL para platform root, valor para white-label',
+    
+    -- Configuración
     configuration JSON,
+    
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
-    updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
+    updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    
+    FOREIGN KEY (parent_tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT,
+    
+    INDEX idx_tenants_mode (mode),
+    INDEX idx_tenants_parent (parent_tenant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Tabla de Departamentos
-CREATE TABLE departments (
+-- ============================================
+-- Tabla de Organizaciones (Municipios, Empresas, Colegios, Plataformas revendedoras, etc.)
+-- ============================================
+DROP TABLE IF EXISTS organizations;
+CREATE TABLE organizations (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     tenant_id CHAR(36) NOT NULL,
+    parent_id CHAR(36), -- Auto-referencia para jerarquía
+    
+    -- Tipo y datos básicos
+    type VARCHAR(50) NOT NULL, -- 'MUNICIPALITY', 'COMPANY', 'SCHOOL', 'DEPARTMENT', 'BRANCH', 'DIVISION', 'RESELLER', etc.
     name VARCHAR(255) NOT NULL,
+    legal_name VARCHAR(255),
     description TEXT,
+    
+    -- Identificación fiscal/legal (para facturación)
+    tax_id VARCHAR(50), -- RFC para México, NIT para otros países
+    country_code VARCHAR(2) DEFAULT 'MX',
+    
+    -- Jerarquía
+    level INT NOT NULL DEFAULT 0, -- 0=cliente directo, 1=departamento, 2=subdepartamento, etc.
+    
+    -- Estado y suspensión
+    status ENUM('ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_ACTIVATION') DEFAULT 'PENDING_ACTIVATION',
+    suspended_reason VARCHAR(255),
+    suspended_at TIMESTAMP(6),
+    
+    -- Plan y facturación (heredado del parent si es null)
+    plan_type ENUM('free', 'basic', 'professional', 'enterprise', 'custom'),
+    billing_email VARCHAR(255),
+    
+    -- Metadata flexible para datos específicos por tipo
+    metadata JSON,
+    
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_id) REFERENCES organizations(id) ON DELETE CASCADE,
     
-    UNIQUE(tenant_id, name) -- Nombre único por tenant
+    UNIQUE KEY uk_organizations_tenant_name (tenant_id, name),
+    INDEX idx_organizations_tax_id (tax_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
@@ -82,6 +132,7 @@ DROP TABLE IF EXISTS users;
 CREATE TABLE users (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     tenant_id CHAR(36) NOT NULL,
+    organization_id CHAR(36), -- Organización a la que pertenece
     email VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255),
     
@@ -104,10 +155,7 @@ CREATE TABLE users (
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
 
-    -- Department
-    department_id CHAR(36),
-
-    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
+    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
     
@@ -156,6 +204,7 @@ CREATE TABLE audit_logs (
     
     -- Referencias (NULLables para permitir auditoría de operaciones fallidas)
     tenant_id CHAR(36),
+    organization_id CHAR(36), -- Organización relacionada con la operación
     user_id CHAR(36),
     resource_id CHAR(36),
     resource_type VARCHAR(50),
@@ -185,12 +234,20 @@ CREATE TABLE audit_logs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
--- 4. CRYPTO_KEYS - Claves criptográficas
+-- 4. CRYPTO_KEYS - Claves criptográficas con jerarquía PKI
 -- ============================================
 DROP TABLE IF EXISTS crypto_keys;
 CREATE TABLE crypto_keys (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     tenant_id CHAR(36) NOT NULL,
+    
+    -- Propietario de la clave (polimórfico)
+    owner_type ENUM('TENANT', 'ORGANIZATION', 'USER') NOT NULL,
+    owner_id CHAR(36) NOT NULL, -- ID de tenant, organization o user
+    
+    -- Jerarquía PKI
+    parent_key_id CHAR(36), -- Clave que firmó el CSR de esta clave
+    cert_level INT NOT NULL DEFAULT 0, -- 0=master/root, 1=intermediate, 2=end-entity
     
     -- Identificación
     name VARCHAR(255) NOT NULL,
@@ -222,6 +279,7 @@ CREATE TABLE crypto_keys (
     updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_key_id) REFERENCES crypto_keys(id) ON DELETE RESTRICT,
     
     UNIQUE KEY uk_crypto_keys_tenant_name (tenant_id, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -302,6 +360,7 @@ CREATE TABLE key_operations (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     key_id CHAR(36) NOT NULL,
     tenant_id CHAR(36) NOT NULL,
+    organization_id CHAR(36), -- Organización asociada a la operación
     
     -- Operación
     operation_type ENUM('GENERATE', 'SIGN', 'VERIFY', 'ENCRYPT', 'DECRYPT', 'IMPORT', 'EXPORT'),
@@ -325,17 +384,22 @@ CREATE TABLE key_operations (
     
     FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE CASCADE,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     FOREIGN KEY (initiated_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
--- 9. CERTIFICATES - Certificados digitales
+-- 9. CERTIFICATES - Certificados digitales con cadena PKI
 -- ============================================
 DROP TABLE IF EXISTS certificates;
 CREATE TABLE certificates (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     tenant_id CHAR(36) NOT NULL,
     key_id CHAR(36) NOT NULL,
+    
+    -- Propietario del certificado (polimórfico)
+    owner_type ENUM('TENANT', 'ORGANIZATION', 'USER') NOT NULL,
+    owner_id CHAR(36) NOT NULL,
     
     -- Información del certificado
     common_name VARCHAR(255) NOT NULL,
@@ -347,9 +411,12 @@ CREATE TABLE certificates (
     csr_pem TEXT,
     private_key_handle VARCHAR(255),
     
-    -- Jerarquía
-    issuer_certificate_id CHAR(36),
+    -- Cadena de certificación y jerarquía PKI
+    issuer_certificate_id CHAR(36), -- Certificado que firmó este
+    issuer_key_id CHAR(36),         -- Clave que firmó este CSR
     is_ca BOOLEAN DEFAULT FALSE,
+    path_length INT,                 -- Máxima profundidad de certificados que puede firmar
+    cert_level INT NOT NULL DEFAULT 0, -- 0=root, 1=intermediate, 2=end-entity
     
     -- Validez
     valid_from TIMESTAMP(6) NOT NULL,
@@ -370,7 +437,8 @@ CREATE TABLE certificates (
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE CASCADE,
-    FOREIGN KEY (issuer_certificate_id) REFERENCES certificates(id) ON DELETE SET NULL
+    FOREIGN KEY (issuer_certificate_id) REFERENCES certificates(id) ON DELETE SET NULL,
+    FOREIGN KEY (issuer_key_id) REFERENCES crypto_keys(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
@@ -414,6 +482,7 @@ DROP TABLE IF EXISTS signing_requests;
 CREATE TABLE signing_requests (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     tenant_id CHAR(36) NOT NULL,
+    organization_id CHAR(36), -- Organización que solicita la firma
     user_id CHAR(36),
     key_id CHAR(36),
     
@@ -438,6 +507,7 @@ CREATE TABLE signing_requests (
     expires_at TIMESTAMP(6),
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -638,8 +708,17 @@ CREATE TABLE tenant_usage_history (
 -- CREAR ÍNDICES
 -- ============================================
 
+-- Índices para organizations
+CREATE INDEX idx_organizations_tenant ON organizations(tenant_id, type);
+CREATE INDEX idx_organizations_parent ON organizations(parent_id);
+CREATE INDEX idx_organizations_level ON organizations(level);
+CREATE INDEX idx_organizations_status ON organizations(tenant_id, status);
+CREATE INDEX idx_organizations_plan ON organizations(plan_type);
+CREATE INDEX idx_organizations_country ON organizations(country_code);
+
 -- Índices para audit_logs
 CREATE INDEX idx_audit_tenant_created ON audit_logs(tenant_id, created_at DESC);
+CREATE INDEX idx_audit_organization ON audit_logs(organization_id, created_at DESC);
 CREATE INDEX idx_audit_service_action ON audit_logs(service_name, event_action, created_at DESC);
 CREATE INDEX idx_audit_correlation ON audit_logs(correlation_id);
 CREATE INDEX idx_audit_actor ON audit_logs(actor_type, actor_id);
@@ -650,31 +729,61 @@ CREATE INDEX idx_audit_resource ON audit_logs(resource_type, resource_id);
 -- Índices para audit_metadata
 CREATE INDEX idx_audit_meta_key ON audit_metadata(meta_key);
 
--- Índices para otras tablas
+-- Índices para users
 CREATE INDEX idx_users_tenant_status ON users(tenant_id, status);
+CREATE INDEX idx_users_organization ON users(organization_id);
 CREATE INDEX idx_users_external ON users(tenant_id, identity_provider, external_id);
+
+-- Índices para sessions
 CREATE INDEX idx_sessions_user ON user_sessions(user_id, created_at DESC);
 CREATE INDEX idx_sessions_expires ON user_sessions(expires_at);
 CREATE INDEX idx_sessions_tenant ON user_sessions(tenant_id, revoked_at);
+
+-- Índices para crypto_keys (con jerarquía PKI)
 CREATE INDEX idx_crypto_keys_tenant_active ON crypto_keys(tenant_id, is_active);
+CREATE INDEX idx_crypto_keys_owner ON crypto_keys(owner_type, owner_id);
+CREATE INDEX idx_crypto_keys_parent ON crypto_keys(parent_key_id);
+CREATE INDEX idx_crypto_keys_hierarchy ON crypto_keys(tenant_id, cert_level);
 CREATE INDEX idx_crypto_keys_algorithm ON crypto_keys(algorithm, key_size);
+
+-- Índices para key_metadata
 CREATE INDEX idx_key_metadata_key ON key_metadata(meta_key);
+
+-- Índices para key_operations
 CREATE INDEX idx_key_ops_created ON key_operations(created_at DESC);
 CREATE INDEX idx_key_ops_key ON key_operations(key_id, created_at);
 CREATE INDEX idx_key_ops_tenant ON key_operations(tenant_id, operation_type);
+CREATE INDEX idx_key_ops_organization ON key_operations(organization_id);
+
+-- Índices para certificates (con cadena PKI)
 CREATE INDEX idx_certificates_tenant_status ON certificates(tenant_id, status);
+CREATE INDEX idx_certificates_owner ON certificates(owner_type, owner_id);
+CREATE INDEX idx_certificates_issuer_cert ON certificates(issuer_certificate_id);
+CREATE INDEX idx_certificates_issuer_key ON certificates(issuer_key_id);
+CREATE INDEX idx_certificates_hierarchy ON certificates(tenant_id, cert_level);
 CREATE INDEX idx_certificates_validity ON certificates(valid_to, status);
 CREATE INDEX idx_certificates_serial ON certificates(serial_number);
+
+-- Índices para identity_documents
 CREATE INDEX idx_identity_docs_tenant ON identity_documents(tenant_id, type);
 CREATE INDEX idx_identity_docs_expires ON identity_documents(expires_at);
+
+-- Índices para signing_requests
 CREATE INDEX idx_signing_req_tenant_status ON signing_requests(tenant_id, status);
+CREATE INDEX idx_signing_req_organization ON signing_requests(organization_id);
 CREATE INDEX idx_signing_req_user ON signing_requests(user_id, created_at DESC);
 CREATE INDEX idx_signing_req_expires ON signing_requests(expires_at);
+
+-- Índices para signatures
 CREATE INDEX idx_signatures_key ON signatures(key_id, signing_time);
 CREATE INDEX idx_signatures_validated ON signatures(is_validated, validation_timestamp);
+
+-- Índices para verifications
 CREATE INDEX idx_verifications_tenant ON verifications(tenant_id, created_at DESC);
 CREATE INDEX idx_verifications_valid ON verifications(is_valid, verified_at);
 CREATE INDEX idx_verifications_document ON verifications(document_hash);
+
+-- Índices para key_permissions
 CREATE INDEX idx_key_permissions_user ON key_permissions(user_id, valid_to);
 CREATE INDEX idx_key_permissions_validity ON key_permissions(valid_to);
 
@@ -686,10 +795,358 @@ CREATE INDEX idx_usage_history_tenant ON tenant_usage_history(tenant_id, created
 CREATE INDEX idx_usage_history_type ON tenant_usage_history(quota_type, created_at DESC);
 CREATE INDEX idx_usage_history_resource ON tenant_usage_history(resource_type, resource_id);
 
+-- ============================================
+-- TRIGGERS DE VALIDACIÓN PKI
+-- ============================================
+
+DELIMITER $$
+
+-- ============================================
+-- TRIGGER 1: Validar jerarquía PKI al insertar certificado
+-- ============================================
+CREATE TRIGGER trg_validate_certificate_hierarchy_before_insert
+BEFORE INSERT ON certificates
+FOR EACH ROW
+BEGIN
+    DECLARE parent_is_ca BOOLEAN;
+    DECLARE parent_path_length INT;
+    DECLARE parent_cert_level INT;
+    DECLARE key_owner_type VARCHAR(20);
+    DECLARE key_owner_id CHAR(36);
+    DECLARE key_cert_level INT;
+    
+    -- Validar consistencia con crypto_keys
+    SELECT owner_type, owner_id, cert_level
+    INTO key_owner_type, key_owner_id, key_cert_level
+    FROM crypto_keys
+    WHERE id = NEW.key_id;
+    
+    IF key_owner_type IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'La clave criptográfica no existe';
+    END IF;
+    
+    -- Validar que owner coincida
+    IF key_owner_type != NEW.owner_type OR key_owner_id != NEW.owner_id THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'El propietario del certificado no coincide con el de la clave';
+    END IF;
+    
+    -- Validar que cert_level coincida
+    IF key_cert_level != NEW.cert_level THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'cert_level del certificado debe coincidir con el de la clave';
+    END IF;
+    
+    -- Si tiene emisor, validar la cadena
+    IF NEW.issuer_certificate_id IS NOT NULL THEN
+        SELECT is_ca, path_length, cert_level
+        INTO parent_is_ca, parent_path_length, parent_cert_level
+        FROM certificates
+        WHERE id = NEW.issuer_certificate_id;
+        
+        IF parent_is_ca IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'El certificado emisor no existe';
+        END IF;
+        
+        -- 1. El emisor DEBE ser una CA
+        IF parent_is_ca = FALSE THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'El certificado emisor no es una CA (is_ca=FALSE)';
+        END IF;
+        
+        -- 2. Si el nuevo certificado es CA, validar path_length del emisor
+        IF NEW.is_ca = TRUE THEN
+            IF parent_path_length IS NOT NULL AND parent_path_length < 1 THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'El emisor no puede firmar CAs intermedias (path_length < 1)';
+            END IF;
+            
+            -- El path_length del hijo debe ser menor
+            IF NEW.path_length IS NOT NULL AND parent_path_length IS NOT NULL THEN
+                IF NEW.path_length >= parent_path_length THEN
+                    SIGNAL SQLSTATE '45000'
+                    SET MESSAGE_TEXT = 'path_length del certificado hijo debe ser menor que el del padre';
+                END IF;
+            END IF;
+        END IF;
+        
+        -- 3. Validar que cert_level sea secuencial
+        IF NEW.cert_level != (parent_cert_level + 1) THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'cert_level debe ser secuencial (padre + 1)';
+        END IF;
+        
+        -- 4. Validar que issuer_key_id corresponda al certificado emisor
+        IF NEW.issuer_key_id IS NOT NULL THEN
+            IF NOT EXISTS (
+                SELECT 1 FROM certificates 
+                WHERE id = NEW.issuer_certificate_id 
+                AND key_id = NEW.issuer_key_id
+            ) THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'issuer_key_id no corresponde con el key_id del certificado emisor';
+            END IF;
+        END IF;
+        
+        -- 5. Validar que el emisor no esté revocado o expirado
+        IF EXISTS (
+            SELECT 1 FROM certificates 
+            WHERE id = NEW.issuer_certificate_id 
+            AND (status = 'REVOKED' OR status = 'EXPIRED')
+        ) THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'No se puede emitir certificado: el emisor está revocado o expirado';
+        END IF;
+    ELSE
+        -- Si no tiene emisor, DEBE ser root (cert_level=0)
+        IF NEW.cert_level != 0 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Solo certificados root (cert_level=0) pueden no tener emisor';
+        END IF;
+        
+        -- Root debe ser CA
+        IF NEW.is_ca = FALSE THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Certificados root deben ser CA (is_ca=TRUE)';
+        END IF;
+    END IF;
+    
+    -- Validar path_length si es CA
+    IF NEW.is_ca = TRUE THEN
+        IF NEW.path_length IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'path_length es requerido para certificados CA';
+        END IF;
+        
+        IF NEW.path_length < 0 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'path_length no puede ser negativo';
+        END IF;
+    ELSE
+        -- End-entities no deben tener path_length
+        IF NEW.path_length IS NOT NULL THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Certificados end-entity (is_ca=FALSE) no deben tener path_length';
+        END IF;
+    END IF;
+END$$
+
+-- ============================================
+-- TRIGGER 2: Validar jerarquía PKI al actualizar certificado
+-- ============================================
+CREATE TRIGGER trg_validate_certificate_hierarchy_before_update
+BEFORE UPDATE ON certificates
+FOR EACH ROW
+BEGIN
+    -- No permitir cambios en campos críticos de PKI
+    IF OLD.is_ca != NEW.is_ca THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'No se puede cambiar is_ca de un certificado existente';
+    END IF;
+    
+    IF OLD.cert_level != NEW.cert_level THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'No se puede cambiar cert_level de un certificado existente';
+    END IF;
+    
+    IF OLD.issuer_certificate_id != NEW.issuer_certificate_id 
+       OR (OLD.issuer_certificate_id IS NULL AND NEW.issuer_certificate_id IS NOT NULL)
+       OR (OLD.issuer_certificate_id IS NOT NULL AND NEW.issuer_certificate_id IS NULL) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'No se puede cambiar el emisor de un certificado existente';
+    END IF;
+    
+    IF OLD.key_id != NEW.key_id THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'No se puede cambiar la clave de un certificado existente';
+    END IF;
+END$$
+
+-- ============================================
+-- TRIGGER 3: Prevenir eliminación de certificados con hijos
+-- ============================================
+CREATE TRIGGER trg_prevent_delete_ca_with_children
+BEFORE DELETE ON certificates
+FOR EACH ROW
+BEGIN
+    DECLARE child_count INT;
+    
+    SELECT COUNT(*) INTO child_count
+    FROM certificates
+    WHERE issuer_certificate_id = OLD.id;
+    
+    IF child_count > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'No se puede eliminar un certificado CA que tiene certificados hijos';
+    END IF;
+END$$
+
+-- ============================================
+-- TRIGGER 4: Validar crypto_keys al insertar (con modo híbrido)
+-- ============================================
+CREATE TRIGGER trg_validate_crypto_key_before_insert
+BEFORE INSERT ON crypto_keys
+FOR EACH ROW
+BEGIN
+    DECLARE parent_owner_type VARCHAR(20);
+    DECLARE parent_cert_level INT;
+    DECLARE tenant_mode VARCHAR(20);
+    DECLARE tenant_hsm_slot INT;
+    
+    -- Obtener modo del tenant
+    SELECT mode, hsm_slot INTO tenant_mode, tenant_hsm_slot
+    FROM tenants
+    WHERE id = NEW.tenant_id;
+    
+    -- Si tiene parent_key_id, validar jerarquía
+    IF NEW.parent_key_id IS NOT NULL THEN
+        SELECT owner_type, cert_level
+        INTO parent_owner_type, parent_cert_level
+        FROM crypto_keys
+        WHERE id = NEW.parent_key_id;
+        
+        IF parent_owner_type IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'La clave padre (parent_key_id) no existe';
+        END IF;
+        
+        -- Validar que cert_level sea secuencial
+        IF NEW.cert_level != (parent_cert_level + 1) THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'cert_level de la clave debe ser secuencial (padre + 1)';
+        END IF;
+        
+        -- La clave padre debe pertenecer al nivel superior en la jerarquía
+        -- TENANT puede ser padre de ORGANIZATION
+        -- ORGANIZATION puede ser padre de ORGANIZATION o USER
+        -- USER no puede ser padre
+        IF parent_owner_type = 'USER' THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Una clave de usuario no puede ser padre de otra clave';
+        END IF;
+        
+        -- VALIDACIÓN HÍBRIDA: Si el tenant es MANAGED, la clave debe estar bajo el root de DigSigna
+        IF tenant_mode = 'MANAGED' AND NEW.cert_level = 1 THEN
+            -- Validar que el parent sea el root de la plataforma (cert_level=0, owner_type=TENANT del platform)
+            IF NOT EXISTS (
+                SELECT 1 FROM crypto_keys 
+                WHERE id = NEW.parent_key_id 
+                AND cert_level = 0 
+                AND owner_type = 'TENANT'
+                AND hsm_slot = 0
+            ) THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Tenant MANAGED debe tener CA bajo DigSigna Platform Root (hsm_slot=0)';
+            END IF;
+        END IF;
+    ELSE
+        -- Sin parent_key_id, debe ser root (cert_level=0)
+        IF NEW.cert_level != 0 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Solo claves root (cert_level=0) pueden no tener parent_key_id';
+        END IF;
+        
+        -- Solo TENANT puede tener claves root
+        IF NEW.owner_type != 'TENANT' THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Solo el TENANT puede tener claves root (cert_level=0)';
+        END IF;
+        
+        -- VALIDACIÓN HÍBRIDA: Solo tenants INDEPENDENT pueden crear root CA propias
+        IF tenant_mode = 'MANAGED' THEN
+            -- Verificar si es el platform root (hsm_slot=0)
+            IF tenant_hsm_slot != 0 THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Solo tenants INDEPENDENT pueden crear Root CA propias. Tenant MANAGED debe usar Intermediate CA';
+            END IF;
+        END IF;
+        
+        -- Si es INDEPENDENT, debe usar hsm_slot dedicado (> 0)
+        IF tenant_mode = 'INDEPENDENT' AND NEW.hsm_slot = 0 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Tenant INDEPENDENT debe usar hsm_slot dedicado (> 0)';
+        END IF;
+    END IF;
+    
+    -- Validar cert_level no negativo
+    IF NEW.cert_level < 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'cert_level no puede ser negativo';
+    END IF;
+    
+    -- Validar que hsm_slot coincida con el del tenant (para MANAGED)
+    IF tenant_mode = 'MANAGED' AND NEW.hsm_slot != 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Claves de tenant MANAGED deben usar hsm_slot=0 (compartido)';
+    END IF;
+END$$
+
+-- ============================================
+-- TRIGGER 5: Validar organización activa al crear clave
+-- ============================================
+CREATE TRIGGER trg_validate_organization_for_key
+BEFORE INSERT ON crypto_keys
+FOR EACH ROW
+BEGIN
+    DECLARE org_status VARCHAR(20);
+    
+    -- Si el owner es una organización, validar que esté activa
+    IF NEW.owner_type = 'ORGANIZATION' THEN
+        SELECT status INTO org_status
+        FROM organizations
+        WHERE id = NEW.owner_id;
+        
+        IF org_status IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'La organización propietaria no existe';
+        END IF;
+        
+        IF org_status != 'ACTIVE' THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'No se puede crear clave para organización inactiva';
+        END IF;
+    END IF;
+    
+    -- Si el owner es un usuario, validar que esté activo
+    IF NEW.owner_type = 'USER' THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM users 
+            WHERE id = NEW.owner_id 
+            AND status = 'ACTIVE'
+        ) THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'El usuario propietario no existe o no está activo';
+        END IF;
+    END IF;
+END$$
+
+-- ============================================
+-- TRIGGER 6: Prevenir eliminación de claves con hijos
+-- ============================================
+CREATE TRIGGER trg_prevent_delete_key_with_children
+BEFORE DELETE ON crypto_keys
+FOR EACH ROW
+BEGIN
+    DECLARE child_count INT;
+    
+    SELECT COUNT(*) INTO child_count
+    FROM crypto_keys
+    WHERE parent_key_id = OLD.id;
+    
+    IF child_count > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'No se puede eliminar una clave que tiene claves hijas en la jerarquía PKI';
+    END IF;
+END$$
+
+DELIMITER ;
+
 -- Habilitar FK nuevamente
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ============================================
 -- MENSAJE FINAL
 -- ============================================
-SELECT 'Base de datos DigSigna inicializada correctamente' AS message;
+SELECT 'Base de datos DigSigna inicializada correctamente con triggers PKI' AS message;
