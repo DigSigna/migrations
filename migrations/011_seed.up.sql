@@ -595,7 +595,7 @@ VALUES (
 -- 27. Usuario Admin de Celaya (Organization Manager del municipio)
 INSERT INTO users (
     id, tenant_id, organization_id, email, password_hash, 
-    first_name, last_name, phone, status, mfa_enabled
+    first_name, last_name, status, mfa_enabled
 )
 VALUES (
     '20000000-2000-2000-2000-000000000101',
@@ -605,7 +605,6 @@ VALUES (
     '$2a$10$N9qo8uLOickgx2ZMRZoMye3Y6l7dFg7/7gZ8J5J5J5J5J5J5J5J5J5',
     'María',
     'González Hernández',
-    '+52 461 612 0000',
     'ACTIVE',
     TRUE
 ) ON DUPLICATE KEY UPDATE 
@@ -622,7 +621,7 @@ VALUES (
 -- 29. Usuario: Director de Desarrollo Urbano
 INSERT INTO users (
     id, tenant_id, organization_id, email, password_hash, 
-    first_name, last_name, phone, status, mfa_enabled
+    first_name, last_name, status, mfa_enabled
 )
 VALUES (
     '20000000-2000-2000-2000-000000000102',
@@ -632,7 +631,6 @@ VALUES (
     '$2a$10$N9qo8uLOickgx2ZMRZoMye3Y6l7dFg7/7gZ8J5J5J5J5J5J5J5J5J5',
     'Carlos',
     'Ramírez López',
-    '+52 461 612 0100',
     'ACTIVE',
     TRUE
 ) ON DUPLICATE KEY UPDATE 
@@ -649,7 +647,7 @@ VALUES (
 -- 31. Usuario: Encargado de permisos (Signing User)
 INSERT INTO users (
     id, tenant_id, organization_id, email, password_hash, 
-    first_name, last_name, phone, status, mfa_enabled
+    first_name, last_name, status, mfa_enabled
 )
 VALUES (
     '20000000-2000-2000-2000-000000000103',
@@ -659,7 +657,6 @@ VALUES (
     '$2a$10$N9qo8uLOickgx2ZMRZoMye3Y6l7dFg7/7gZ8J5J5J5J5J5J5J5J5J5',
     'Ana',
     'Martínez García',
-    '+52 461 612 0101',
     'ACTIVE',
     FALSE
 ) ON DUPLICATE KEY UPDATE 
@@ -676,7 +673,7 @@ VALUES (
 -- 33. Usuario: Asistente administrativo (Signing User)
 INSERT INTO users (
     id, tenant_id, organization_id, email, password_hash, 
-    first_name, last_name, phone, status, mfa_enabled
+    first_name, last_name, status, mfa_enabled
 )
 VALUES (
     '20000000-2000-2000-2000-000000000104',
@@ -686,7 +683,6 @@ VALUES (
     '$2a$10$N9qo8uLOickgx2ZMRZoMye3Y6l7dFg7/7gZ8J5J5J5J5J5J5J5J5J5',
     'Luis',
     'Pérez Moreno',
-    '+52 461 612 0102',
     'ACTIVE',
     FALSE
 ) ON DUPLICATE KEY UPDATE 
