@@ -1,0 +1,211 @@
+-- ============================================
+-- PKI: Claves Criptográficas y Certificados
+-- ============================================
+
+SET FOREIGN_KEY_CHECKS = 0;
+
+USE digsigna;
+
+-- ============================================
+-- 1. CRYPTO_KEYS - Claves con jerarquía PKI
+-- ============================================
+DROP TABLE IF EXISTS crypto_keys;
+CREATE TABLE crypto_keys (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    tenant_id CHAR(36) NOT NULL,
+    
+    -- Propietario polimórfico
+    owner_type ENUM('TENANT', 'ORGANIZATION', 'USER') NOT NULL,
+    owner_id CHAR(36) NOT NULL,
+    
+    -- Jerarquía PKI
+    parent_key_id CHAR(36),
+    cert_level INT NOT NULL DEFAULT 0,
+    
+    -- Identificación
+    name VARCHAR(255) NOT NULL,
+    alias VARCHAR(255),
+    
+    -- Especificaciones
+    algorithm ENUM('RSA', 'ECC', 'ECDSA', 'ED25519') NOT NULL,
+    key_size INT NOT NULL,
+    purpose ENUM('SIGNING', 'ENCRYPTION', 'SIGN_AND_ENCRYPT') NOT NULL,
+    
+    -- Datos de clave
+    public_key BLOB,
+    key_handle VARCHAR(255),
+    key_label VARCHAR(255),
+    
+    -- HSM y seguridad
+    is_hardware_backed BOOLEAN DEFAULT TRUE,
+    hsm_slot INT,
+    
+    -- Estado
+    is_active BOOLEAN DEFAULT TRUE,
+    version INT DEFAULT 1,
+    
+    -- Fechas
+    rotation_date DATE,
+    expiration_date DATE,
+    
+    created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_key_id) REFERENCES crypto_keys(id) ON DELETE RESTRICT,
+    
+    UNIQUE KEY uk_crypto_keys_tenant_name (tenant_id, name),
+    INDEX idx_crypto_keys_tenant_active (tenant_id, is_active),
+    INDEX idx_crypto_keys_owner (owner_type, owner_id),
+    INDEX idx_crypto_keys_parent (parent_key_id),
+    INDEX idx_crypto_keys_hierarchy (tenant_id, cert_level),
+    INDEX idx_crypto_keys_algorithm (algorithm, key_size)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- 2. KEY_METADATA
+-- ============================================
+DROP TABLE IF EXISTS key_metadata;
+CREATE TABLE key_metadata (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    key_id CHAR(36) NOT NULL,
+    meta_key VARCHAR(255) NOT NULL,
+    meta_value JSON,
+    created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    
+    FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE CASCADE,
+    
+    UNIQUE KEY uk_key_metadata_key (key_id, meta_key),
+    INDEX idx_key_metadata_key (meta_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- 3. KEY_OPERATIONS - Auditoría de operaciones
+-- ============================================
+DROP TABLE IF EXISTS key_operations;
+CREATE TABLE key_operations (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    key_id CHAR(36) NOT NULL,
+    tenant_id CHAR(36) NOT NULL,
+    organization_id CHAR(36),
+    
+    operation_type ENUM('GENERATE', 'SIGN', 'VERIFY', 'ENCRYPT', 'DECRYPT', 'IMPORT', 'EXPORT'),
+    status ENUM('SUCCESS', 'FAILED', 'PENDING', 'CANCELLED') NOT NULL,
+    
+    initiated_by CHAR(36),
+    session_id VARCHAR(100),
+    request_id VARCHAR(100),
+    
+    input_size_bytes INT,
+    output_size_bytes INT,
+    duration_ms INT,
+    
+    result_summary VARCHAR(500),
+    error_details TEXT,
+    
+    created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+    
+    FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
+    FOREIGN KEY (initiated_by) REFERENCES users(id) ON DELETE SET NULL,
+    
+    INDEX idx_key_ops_created (created_at DESC),
+    INDEX idx_key_ops_key (key_id, created_at),
+    INDEX idx_key_ops_tenant (tenant_id, operation_type),
+    INDEX idx_key_ops_organization (organization_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- 4. KEY_PERMISSIONS
+-- ============================================
+DROP TABLE IF EXISTS key_permissions;
+CREATE TABLE key_permissions (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    key_id CHAR(36) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    
+    can_sign BOOLEAN DEFAULT FALSE,
+    can_encrypt BOOLEAN DEFAULT FALSE,
+    can_decrypt BOOLEAN DEFAULT FALSE,
+    can_manage BOOLEAN DEFAULT FALSE,
+    
+    valid_from TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+    valid_to TIMESTAMP(6),
+    
+    created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    
+    FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    
+    UNIQUE KEY uk_key_permissions (key_id, user_id),
+    INDEX idx_key_permissions_user (user_id, valid_to),
+    INDEX idx_key_permissions_validity (valid_to)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- 5. CERTIFICATES - Certificados digitales
+-- ============================================
+DROP TABLE IF EXISTS certificates;
+CREATE TABLE certificates (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    tenant_id CHAR(36) NOT NULL,
+    key_id CHAR(36) NOT NULL,
+    
+    -- Propietario polimórfico
+    owner_type ENUM('TENANT', 'ORGANIZATION', 'USER') NOT NULL,
+    owner_id CHAR(36) NOT NULL,
+    
+    -- Información del certificado
+    common_name VARCHAR(255) NOT NULL,
+    serial_number VARCHAR(128) UNIQUE NOT NULL,
+    issuer_common_name VARCHAR(255),
+    
+    -- Datos del certificado
+    certificate_pem TEXT NOT NULL,
+    csr_pem TEXT,
+    private_key_handle VARCHAR(255),
+    
+    -- Cadena de certificación PKI
+    issuer_certificate_id CHAR(36),
+    issuer_key_id CHAR(36),
+    is_ca BOOLEAN DEFAULT FALSE,
+    path_length INT,
+    cert_level INT NOT NULL DEFAULT 0,
+    
+    -- Validez
+    valid_from TIMESTAMP(6) NOT NULL,
+    valid_to TIMESTAMP(6) NOT NULL,
+    
+    -- Estado
+    status ENUM('ACTIVE', 'REVOKED', 'EXPIRED', 'PENDING', 'SUSPENDED') DEFAULT 'PENDING',
+    revocation_reason VARCHAR(255),
+    revoked_at TIMESTAMP(6),
+    
+    -- Metadata
+    subject_alternative_names JSON,
+    key_usage JSON,
+    extended_key_usage JSON,
+    
+    created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE CASCADE,
+    FOREIGN KEY (issuer_certificate_id) REFERENCES certificates(id) ON DELETE SET NULL,
+    FOREIGN KEY (issuer_key_id) REFERENCES crypto_keys(id) ON DELETE SET NULL,
+    
+    INDEX idx_certificates_tenant_status (tenant_id, status),
+    INDEX idx_certificates_owner (owner_type, owner_id),
+    INDEX idx_certificates_issuer_cert (issuer_certificate_id),
+    INDEX idx_certificates_issuer_key (issuer_key_id),
+    INDEX idx_certificates_hierarchy (tenant_id, cert_level),
+    INDEX idx_certificates_validity (valid_to, status),
+    INDEX idx_certificates_serial (serial_number)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+SELECT 'Tablas PKI creadas correctamente' AS message;
