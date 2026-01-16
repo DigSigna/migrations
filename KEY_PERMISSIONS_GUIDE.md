@@ -1,13 +1,13 @@
 # Guía de Permisos Granulares de Claves
 
-## 📋 Resumen
+##  Resumen
 
 Sistema de permisos de dos niveles implementado en DigSigna:
 
 1. **Nivel 1: RBAC del Tenant** - Permisos generales por rol
 2. **Nivel 2: Permisos de Clave** - Control granular por clave específica
 
-## 🔐 Principio de Seguridad: Defense in Depth
+##  Principio de Seguridad: Defense in Depth
 
 ```
 Usuario tiene rol "Signing User"
@@ -18,10 +18,10 @@ Debe tener permiso SIGN en la clave específica
     ↓
 Permiso debe estar activo (no revocado, dentro de ventana de validez)
     ↓
-✅ PERMITIDO
+[x] PERMITIDO
 ```
 
-## 📊 Tipos de Permisos
+##  Tipos de Permisos
 
 | Permiso | Bitmap | Descripción | Caso de Uso |
 |---------|--------|-------------|-------------|
@@ -35,28 +35,28 @@ Permiso debe estar activo (no revocado, dentro de ventana de validez)
 | `EXPORT` | 128 | Exportar clave pública | Distribución de certs |
 | `BACKUP` | 256 | Crear backup | DR y continuidad |
 
-## 🎯 Casos de Uso - Municipio de Celaya
+##  Casos de Uso - Municipio de Celaya
 
 ### Escenario 1: Jerarquía de Permisos
 
 ```sql
 -- María González (Admin Municipal)
--- ✅ Puede: SIGN, MANAGE, DELEGATE en ambas claves
--- ✅ Puede otorgar permisos a otros usuarios
+-- [x] Puede: SIGN, MANAGE, DELEGATE en ambas claves
+-- [x] Puede otorgar permisos a otros usuarios
 
 -- Carlos Ramírez (Director Desarrollo Urbano)
--- ✅ Puede: SIGN, MANAGE, DELEGATE en KEY_PERMISOS_CONSTRUCCION
--- ✅ Puede: VERIFY (solo lectura) en KEY_FIRMA_NOMINA
--- ❌ NO puede: Firmar nóminas
+-- [x] Puede: SIGN, MANAGE, DELEGATE en KEY_PERMISOS_CONSTRUCCION
+-- [x] Puede: VERIFY (solo lectura) en KEY_FIRMA_NOMINA
+-- [ ] NO puede: Firmar nóminas
 
 -- Ana Martínez (Encargado Permisos)
--- ✅ Puede: SIGN en KEY_PERMISOS_CONSTRUCCION (temporal hasta 2026-12-31)
--- ❌ NO puede: Gestionar la clave ni delegar permisos
--- ❌ NO tiene: Acceso a KEY_FIRMA_NOMINA
+-- [x] Puede: SIGN en KEY_PERMISOS_CONSTRUCCION (temporal hasta 2026-12-31)
+-- [ ] NO puede: Gestionar la clave ni delegar permisos
+-- [ ] NO tiene: Acceso a KEY_FIRMA_NOMINA
 
 -- Luis Pérez (Asistente)
--- ✅ Puede: VERIFY, EXPORT en KEY_PERMISOS_CONSTRUCCION
--- ❌ NO puede: Firmar ni gestionar
+-- [x] Puede: VERIFY, EXPORT en KEY_PERMISOS_CONSTRUCCION
+-- [ ] NO puede: Firmar ni gestionar
 ```
 
 ### Escenario 2: Delegación Temporal
