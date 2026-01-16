@@ -24,13 +24,16 @@ Las migraciones han sido divididas en módulos pequeños y manejables para facil
 
 ---
 
-#### **002_crypto_pki.up.sql** (~250 líneas)
+#### **002_crypto_pki.up.sql** (~300 líneas)
 **Descripción:** Infraestructura PKI (Claves y Certificados)
 - `crypto_keys` - Claves criptográficas con jerarquía PKI
 - `key_metadata` - Metadata de claves
 - `key_operations` - Auditoría de operaciones con claves
-- `key_permissions` - Permisos sobre claves
+- `key_permissions` - **Permisos granulares por clave** (diseño normalizado con auditoría completa)
+- `key_permissions_cache` - Cache materializada para performance (bitmap de permisos)
 - `certificates` - Certificados digitales con cadena de confianza
+
+**Sistema de Permisos:** Ver [KEY_PERMISSIONS_GUIDE.md](../KEY_PERMISSIONS_GUIDE.md) para detalles completos del sistema de permisos de dos niveles (RBAC + permisos granulares).
 
 **Orden de ejecución:** 2  
 **Dependencias:** 001_base_tables (tenants, organizations, users)
@@ -131,11 +134,13 @@ Datos iniciales (seeds):
 | Archivo | Líneas | Tablas | Triggers | Descripción |
 |---------|--------|--------|----------|-------------|
 | 001_base_tables | ~300 | 10 | 0 | Usuarios, roles, organizaciones |
-| 002_crypto_pki | ~250 | 5 | 0 | Claves y certificados PKI |
+| 002_crypto_pki | ~300 | 7 | 0 | Claves, permisos granulares, PKI |
 | 003_signing_workflow | ~150 | 3 | 0 | Firmas y verificaciones |
 | 004_audit_quotas | ~250 | 5 | 0 | Auditoría y límites |
 | 005_pki_triggers | ~350 | 0 | 6 | Validaciones PKI |
-| **TOTAL CORE** | **~1,300** | **23** | **6** | **Sistema completo** |
+| 006_billing_plans | ~350 | 6 | 0 | Planes y facturación |
+| 011_seed | ~850 | 0 | 0 | Datos iniciales + Celaya |
+| **TOTAL CORE** | **~2,550** | **31** | **6** | **Sistema completo** |
 
 ---
 

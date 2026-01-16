@@ -739,3 +739,140 @@ VALUES
      'CERTIFICATE', NULL)
 ON DUPLICATE KEY UPDATE
     new_value = VALUES(new_value);
+
+-- ============================================
+-- EJEMPLO: CLAVES Y PERMISOS DE CELAYA
+-- ============================================
+
+-- 38. Clave de firma para permisos de construcción (Desarrollo Urbano)
+INSERT INTO crypto_keys (
+    id, tenant_id, owner_type, owner_id,
+    parent_key_id, cert_level,
+    name, alias, algorithm, key_size, purpose,
+    is_hardware_backed, hsm_slot, is_active
+)
+VALUES (
+    '60000000-6000-6000-6000-000000000001',
+    '20000000-2000-2000-2000-000000000001',  -- Celaya
+    'ORGANIZATION',
+    '20000000-2000-2000-2000-000000000012',  -- Desarrollo Urbano
+    NULL,  -- Es una clave raíz del departamento
+    0,
+    'KEY_PERMISOS_CONSTRUCCION',
+    'Clave de Firma - Permisos de Construcción',
+    'RSA',
+    2048,
+    'SIGNING',
+    TRUE,
+    0,  -- MANAGED mode, usa HSM compartido
+    TRUE
+) ON DUPLICATE KEY UPDATE
+    name = VALUES(name);
+
+-- 39. Clave de firma para nómina (solo administradores)
+INSERT INTO crypto_keys (
+    id, tenant_id, owner_type, owner_id,
+    parent_key_id, cert_level,
+    name, alias, algorithm, key_size, purpose,
+    is_hardware_backed, hsm_slot, is_active
+)
+VALUES (
+    '60000000-6000-6000-6000-000000000002',
+    '20000000-2000-2000-2000-000000000001',  -- Celaya
+    'ORGANIZATION',
+    '20000000-2000-2000-2000-000000000011',  -- Municipio (nivel superior)
+    NULL,
+    0,
+    'KEY_FIRMA_NOMINA',
+    'Clave de Firma - Nómina Municipal',
+    'RSA',
+    4096,  -- Más segura para nómina
+    'SIGNING',
+    TRUE,
+    0,
+    TRUE
+) ON DUPLICATE KEY UPDATE
+    name = VALUES(name);
+
+-- ============================================
+-- PERMISOS GRANULARES POR CLAVE
+-- ============================================
+
+-- 40. María González (Admin) - Acceso completo a ambas claves
+INSERT INTO key_permissions (
+    id, key_id, user_id, permission_type,
+    granted_by, valid_from, valid_to
+)
+VALUES 
+    -- Permisos construcción
+    ('70000000-7000-7000-7000-000000000001', '60000000-6000-6000-6000-000000000001', '20000000-2000-2000-2000-000000000101', 'SIGN', NULL, '2025-12-01 00:00:00', NULL),
+    ('70000000-7000-7000-7000-000000000002', '60000000-6000-6000-6000-000000000001', '20000000-2000-2000-2000-000000000101', 'MANAGE', NULL, '2025-12-01 00:00:00', NULL),
+    ('70000000-7000-7000-7000-000000000003', '60000000-6000-6000-6000-000000000001', '20000000-2000-2000-2000-000000000101', 'DELEGATE', NULL, '2025-12-01 00:00:00', NULL),
+    -- Permisos nómina
+    ('70000000-7000-7000-7000-000000000004', '60000000-6000-6000-6000-000000000002', '20000000-2000-2000-2000-000000000101', 'SIGN', NULL, '2025-12-01 00:00:00', NULL),
+    ('70000000-7000-7000-7000-000000000005', '60000000-6000-6000-6000-000000000002', '20000000-2000-2000-2000-000000000101', 'MANAGE', NULL, '2025-12-01 00:00:00', NULL)
+ON DUPLICATE KEY UPDATE
+    permission_type = VALUES(permission_type);
+
+-- 41. Carlos Ramírez (Director) - Acceso completo a construcción, solo lectura en nómina
+INSERT INTO key_permissions (
+    id, key_id, user_id, permission_type,
+    granted_by, valid_from, valid_to
+)
+VALUES 
+    -- Permisos construcción (otorgados por María)
+    ('70000000-7000-7000-7000-000000000006', '60000000-6000-6000-6000-000000000001', '20000000-2000-2000-2000-000000000102', 'SIGN', '20000000-2000-2000-2000-000000000101', '2025-12-01 00:00:00', NULL),
+    ('70000000-7000-7000-7000-000000000007', '60000000-6000-6000-6000-000000000001', '20000000-2000-2000-2000-000000000102', 'MANAGE', '20000000-2000-2000-2000-000000000101', '2025-12-01 00:00:00', NULL),
+    ('70000000-7000-7000-7000-000000000008', '60000000-6000-6000-6000-000000000001', '20000000-2000-2000-2000-000000000102', 'DELEGATE', '20000000-2000-2000-2000-000000000101', '2025-12-01 00:00:00', NULL),
+    -- Solo verificación en nómina (sin firma)
+    ('70000000-7000-7000-7000-000000000009', '60000000-6000-6000-6000-000000000002', '20000000-2000-2000-2000-000000000102', 'VERIFY', '20000000-2000-2000-2000-000000000101', '2025-12-01 00:00:00', NULL)
+ON DUPLICATE KEY UPDATE
+    permission_type = VALUES(permission_type);
+
+-- 42. Ana Martínez (Encargado permisos) - Solo firma de construcción (temporal)
+INSERT INTO key_permissions (
+    id, key_id, user_id, permission_type,
+    granted_by, valid_from, valid_to,
+    metadata
+)
+VALUES 
+    -- Permiso temporal hasta fin de año (delegado por Carlos)
+    ('70000000-7000-7000-7000-000000000010', '60000000-6000-6000-6000-000000000001', '20000000-2000-2000-2000-000000000103', 'SIGN', '20000000-2000-2000-2000-000000000102', '2026-01-01 00:00:00', '2026-12-31 23:59:59', '{"restriction": "solo_permisos_menores", "max_amount": 100000}')
+ON DUPLICATE KEY UPDATE
+    permission_type = VALUES(permission_type);
+
+-- 43. Luis Pérez (Asistente) - Solo verificación, sin firma
+INSERT INTO key_permissions (
+    id, key_id, user_id, permission_type,
+    granted_by, valid_from, valid_to
+)
+VALUES 
+    ('70000000-7000-7000-7000-000000000011', '60000000-6000-6000-6000-000000000001', '20000000-2000-2000-2000-000000000104', 'VERIFY', '20000000-2000-2000-2000-000000000102', '2026-01-01 00:00:00', NULL),
+    ('70000000-7000-7000-7000-000000000012', '60000000-6000-6000-6000-000000000001', '20000000-2000-2000-2000-000000000104', 'EXPORT', '20000000-2000-2000-2000-000000000102', '2026-01-01 00:00:00', NULL)
+ON DUPLICATE KEY UPDATE
+    permission_type = VALUES(permission_type);
+
+-- ============================================
+-- CACHE DE PERMISOS (Performance optimization)
+-- ============================================
+
+-- 44. Materializar cache de permisos activos
+INSERT INTO key_permissions_cache (user_id, key_id, permissions_bitmap, earliest_expiry)
+VALUES
+    -- María: SIGN(1) + MANAGE(16) + DELEGATE(64) = 81 en construcción, SIGN(1) + MANAGE(16) = 17 en nómina
+    ('20000000-2000-2000-2000-000000000101', '60000000-6000-6000-6000-000000000001', 81, NULL),
+    ('20000000-2000-2000-2000-000000000101', '60000000-6000-6000-6000-000000000002', 17, NULL),
+    
+    -- Carlos: SIGN(1) + MANAGE(16) + DELEGATE(64) = 81 en construcción, VERIFY(8) en nómina
+    ('20000000-2000-2000-2000-000000000102', '60000000-6000-6000-6000-000000000001', 81, NULL),
+    ('20000000-2000-2000-2000-000000000102', '60000000-6000-6000-6000-000000000002', 8, NULL),
+    
+    -- Ana: SIGN(1) en construcción (temporal)
+    ('20000000-2000-2000-2000-000000000103', '60000000-6000-6000-6000-000000000001', 1, '2026-12-31 23:59:59'),
+    
+    -- Luis: VERIFY(8) + EXPORT(128) = 136 en construcción
+    ('20000000-2000-2000-2000-000000000104', '60000000-6000-6000-6000-000000000001', 136, NULL)
+ON DUPLICATE KEY UPDATE
+    permissions_bitmap = VALUES(permissions_bitmap),
+    earliest_expiry = VALUES(earliest_expiry);
+

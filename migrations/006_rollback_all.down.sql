@@ -30,6 +30,7 @@ DROP TABLE IF EXISTS verifications;
 DROP TABLE IF EXISTS signatures;
 DROP TABLE IF EXISTS signing_requests;
 DROP TABLE IF EXISTS certificates;
+DROP TABLE IF EXISTS key_permissions_cache;
 DROP TABLE IF EXISTS key_permissions;
 DROP TABLE IF EXISTS key_operations;
 DROP TABLE IF EXISTS key_metadata;

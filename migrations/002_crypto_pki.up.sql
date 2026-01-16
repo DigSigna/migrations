@@ -118,31 +118,78 @@ CREATE TABLE key_operations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
--- 4. KEY_PERMISSIONS
+-- 4. KEY_PERMISSIONS - Permisos granulares por clave
 -- ============================================
+-- Diseño normalizado: un registro por permiso para auditoría completa
 DROP TABLE IF EXISTS key_permissions;
 CREATE TABLE key_permissions (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     key_id CHAR(36) NOT NULL,
     user_id CHAR(36) NOT NULL,
     
-    can_sign BOOLEAN DEFAULT FALSE,
-    can_encrypt BOOLEAN DEFAULT FALSE,
-    can_decrypt BOOLEAN DEFAULT FALSE,
-    can_manage BOOLEAN DEFAULT FALSE,
+    -- Tipo de permiso específico
+    permission_type ENUM(
+        'SIGN',         -- Firmar con esta clave
+        'ENCRYPT',      -- Cifrar con esta clave
+        'DECRYPT',      -- Descifrar con esta clave
+        'VERIFY',       -- Verificar firmas
+        'MANAGE',       -- Gestionar permisos de la clave
+        'REVOKE',       -- Revocar certificados
+        'DELEGATE',     -- Delegar permisos a otros usuarios
+        'EXPORT',       -- Exportar clave pública
+        'BACKUP'        -- Crear backup de la clave
+    ) NOT NULL,
     
+    -- Auditoría completa
+    granted_by CHAR(36),      -- Usuario que otorgó el permiso (NULL = sistema)
+    revoked_by CHAR(36),      -- Usuario que revocó el permiso
+    revoked_at TIMESTAMP(6),  -- Fecha de revocación (soft delete)
+    revocation_reason TEXT,   -- Motivo de revocación
+    
+    -- Ventana de validez
     valid_from TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
-    valid_to TIMESTAMP(6),
+    valid_to TIMESTAMP(6),    -- NULL = sin expiración
+    
+    -- Metadatos adicionales
+    metadata JSON,            -- Condiciones adicionales, restricciones, etc.
     
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
-    updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     
     FOREIGN KEY (key_id) REFERENCES crypto_keys(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (granted_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (revoked_by) REFERENCES users(id) ON DELETE SET NULL,
     
-    UNIQUE KEY uk_key_permissions (key_id, user_id),
-    INDEX idx_key_permissions_user (user_id, valid_to),
-    INDEX idx_key_permissions_validity (valid_to)
+    -- Índices para queries frecuentes
+    INDEX idx_key_perms_user_active (user_id, permission_type, revoked_at, valid_to),
+    INDEX idx_key_perms_key (key_id, permission_type, revoked_at),
+    INDEX idx_key_perms_validity (valid_from, valid_to),
+    INDEX idx_key_perms_revoked (revoked_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- 4B. KEY_PERMISSIONS_CACHE - Cache para performance
+-- ============================================
+-- Tabla materializada para evitar JOINs en operaciones críticas
+DROP TABLE IF EXISTS key_permissions_cache;
+CREATE TABLE key_permissions_cache (
+    user_id CHAR(36) NOT NULL,
+    key_id CHAR(36) NOT NULL,
+    
+    -- Bitmap de permisos activos (bitwise operations)
+    -- 1=SIGN, 2=ENCRYPT, 4=DECRYPT, 8=VERIFY, 16=MANAGE, 32=REVOKE, 64=DELEGATE, 128=EXPORT, 256=BACKUP
+    permissions_bitmap INT NOT NULL DEFAULT 0,
+    
+    -- Expiración más cercana de todos los permisos
+    earliest_expiry TIMESTAMP(6),
+    
+    -- Última actualización del cache
+    cache_updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    
+    PRIMARY KEY (user_id, key_id),
+    INDEX idx_cache_expiry (earliest_expiry),
+    INDEX idx_cache_user (user_id),
+    INDEX idx_cache_key (key_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
