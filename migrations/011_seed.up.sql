@@ -713,7 +713,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO tenant_usage (tenant_id, quota_type, current_usage, period_usage, last_reset_at)
 VALUES 
     ('20000000-2000-2000-2000-000000000001', 'USERS', 4, 4, NULL),              -- 4 usuarios creados
-    ('20000000-2000-2000-2000-000000000001', 'KEYS', 8, 8, NULL),               -- 8 claves generadas
+    ('20000000-2000-2000-2000-000000000001', 'KEYS', 9, 9, NULL),               -- 9 claves generadas (1 root + 8 operacionales)
     ('20000000-2000-2000-2000-000000000001', 'SIGNATURES', 127, 127, '2026-01-01 00:00:00'),     -- 127 firmas en enero
     ('20000000-2000-2000-2000-000000000001', 'VERIFICATIONS', 89, 89, '2026-01-01 00:00:00'),    -- 89 verificaciones
     ('20000000-2000-2000-2000-000000000001', 'STORAGE_MB', 234, 234, NULL),     -- 234 MB usados
@@ -731,8 +731,8 @@ INSERT INTO tenant_usage_history (
 VALUES 
     ('20000000-2000-2000-2000-000000000001', 'USERS', 'INCREMENT', 4, 0, 4, 
      'USER', '20000000-2000-2000-2000-000000000104'),
-    ('20000000-2000-2000-2000-000000000001', 'KEYS', 'INCREMENT', 8, 0, 8, 
-     'KEY', NULL),
+    ('20000000-2000-2000-2000-000000000001', 'KEYS', 'INCREMENT', 9, 0, 9, 
+     'KEY', '60000000-6000-6000-6000-000000000002'),
     ('20000000-2000-2000-2000-000000000001', 'SIGNATURES', 'INCREMENT', 127, 0, 127, 
      'SIGNATURE', NULL),
     ('20000000-2000-2000-2000-000000000001', 'CERTIFICATES', 'INCREMENT', 8, 0, 8, 
@@ -744,7 +744,32 @@ ON DUPLICATE KEY UPDATE
 -- EJEMPLO: CLAVES Y PERMISOS DE CELAYA
 -- ============================================
 
--- 38. Clave de firma para permisos de construcción (Desarrollo Urbano)
+-- 38. Clave Root del Tenant Celaya (Intermediate CA bajo DigSigna Platform)
+INSERT INTO crypto_keys (
+    id, tenant_id, owner_type, owner_id,
+    parent_key_id, cert_level,
+    name, alias, algorithm, key_size, purpose,
+    is_hardware_backed, hsm_slot, is_active
+)
+VALUES (
+    '60000000-6000-6000-6000-000000000000',
+    '20000000-2000-2000-2000-000000000001',  -- Celaya
+    'TENANT',
+    '20000000-2000-2000-2000-000000000001',  -- Celaya es el owner
+    NULL,  -- En producción debería apuntar a la Root CA de DigSigna Platform
+    0,     -- Root del tenant (Intermediate CA en la jerarquía global)
+    'KEY_ROOT_CELAYA',
+    'Root CA - Municipio de Celaya',
+    'RSA',
+    4096,  -- Root CA usa 4096 bits
+    'SIGNING',
+    TRUE,
+    0,  -- MANAGED mode, usa HSM compartido
+    TRUE
+) ON DUPLICATE KEY UPDATE
+    name = VALUES(name);
+
+-- 39. Clave de firma para permisos de construcción (Desarrollo Urbano)
 INSERT INTO crypto_keys (
     id, tenant_id, owner_type, owner_id,
     parent_key_id, cert_level,
@@ -756,8 +781,8 @@ VALUES (
     '20000000-2000-2000-2000-000000000001',  -- Celaya
     'ORGANIZATION',
     '20000000-2000-2000-2000-000000000012',  -- Desarrollo Urbano
-    NULL,  -- Es una clave raíz del departamento
-    0,
+    '60000000-6000-6000-6000-000000000000',  -- Parent: Root Celaya
+    1,     -- Nivel 1: Clave de organización bajo Root Celaya
     'KEY_PERMISOS_CONSTRUCCION',
     'Clave de Firma - Permisos de Construcción',
     'RSA',
@@ -769,7 +794,7 @@ VALUES (
 ) ON DUPLICATE KEY UPDATE
     name = VALUES(name);
 
--- 39. Clave de firma para nómina (solo administradores)
+-- 40. Clave de firma para nómina (solo administradores)
 INSERT INTO crypto_keys (
     id, tenant_id, owner_type, owner_id,
     parent_key_id, cert_level,
@@ -781,8 +806,8 @@ VALUES (
     '20000000-2000-2000-2000-000000000001',  -- Celaya
     'ORGANIZATION',
     '20000000-2000-2000-2000-000000000011',  -- Municipio (nivel superior)
-    NULL,
-    0,
+    '60000000-6000-6000-6000-000000000000',  -- Parent: Root Celaya
+    1,     -- Nivel 1: Clave de organización bajo Root Celaya
     'KEY_FIRMA_NOMINA',
     'Clave de Firma - Nómina Municipal',
     'RSA',
