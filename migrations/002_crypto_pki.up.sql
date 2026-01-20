@@ -90,8 +90,9 @@ CREATE TABLE key_operations (
     tenant_id CHAR(36) NOT NULL,
     organization_id CHAR(36),
     
-    operation_type ENUM('GENERATE', 'SIGN', 'VERIFY', 'ENCRYPT', 'DECRYPT', 'IMPORT', 'EXPORT'),
+    operation_type ENUM('GENERATE', 'ROTATE', 'DELETE', 'SIGN', 'VERIFY', 'ENCRYPT', 'DECRYPT', 'IMPORT', 'EXPORT'),
     status ENUM('SUCCESS', 'FAILED', 'PENDING', 'CANCELLED') NOT NULL,
+    level ENUM('LOW', 'MEDIUM', 'HIGH') DEFAULT 'LOW',
     
     initiated_by CHAR(36),
     session_id VARCHAR(100),
