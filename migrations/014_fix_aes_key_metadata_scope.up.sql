@@ -12,8 +12,8 @@ SET FOREIGN_KEY_CHECKS = 0;
 ALTER TABLE tenants ADD COLUMN hsm_slot_id CHAR(36) NULL;
 CREATE INDEX idx_tenants_hsm_slot_id ON tenants(hsm_slot_id);
 
-ALTER TABLE crypto_keys ADD COLUMN hsm_slot_id CHAR(36) NULL;
-CREATE INDEX idx_crypto_keys_hsm_slot_id ON crypto_keys(hsm_slot_id);
+-- crypto_keys already declares `hsm_slot_id` in earlier migration (002).
+-- If not present, it should be added in a prior migration. We avoid adding it again here to prevent duplicate column errors.
 
 -- 2) Populate hsm_slots from existing legacy tenants.hsm_slot values (create slot rows if missing)
 -- Insert missing slots (use empty encrypted_pin placeholder)
@@ -31,10 +31,12 @@ JOIN hsm_slots hs ON hs.slot_number = t.hsm_slot
 SET t.hsm_slot_id = hs.id
 WHERE t.hsm_slot IS NOT NULL;
 
+-- Map crypto_keys to slot IDs using the tenant mapping (safer: crypto_keys belong to tenants)
 UPDATE crypto_keys ck
-JOIN hsm_slots hs ON hs.slot_number = ck.hsm_slot
+JOIN tenants t ON ck.tenant_id = t.id
+JOIN hsm_slots hs ON hs.id = t.hsm_slot_id
 SET ck.hsm_slot_id = hs.id
-WHERE ck.hsm_slot IS NOT NULL;
+WHERE t.hsm_slot_id IS NOT NULL;
 
 -- 4) Add FK constraints
 ALTER TABLE tenants ADD CONSTRAINT fk_tenants_hsm_slot_id FOREIGN KEY (hsm_slot_id) REFERENCES hsm_slots(id) ON DELETE SET NULL;
