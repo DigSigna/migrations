@@ -33,7 +33,8 @@ CREATE TABLE tenants (
     -- HSM Slot
     -- MANAGED: usa slot 0 (compartido)
     -- INDEPENDENT: usa slot > 0 (dedicado)
-    hsm_slot INT NOT NULL,
+    -- Legacy integer slot kept nullable during migration flow; mapping to `hsm_slots` is handled by later migrations.
+    hsm_slot INT NULL DEFAULT NULL,
     
     -- Relación con tenant padre (solo para INDEPENDENT)
     parent_tenant_id CHAR(36) COMMENT 'Referencia al tenant plataforma. NULL para platform root, valor para white-label',
