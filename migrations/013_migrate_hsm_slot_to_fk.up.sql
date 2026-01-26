@@ -11,12 +11,12 @@ ALTER TABLE tenants
     ADD COLUMN hsm_slot_id CHAR(36) NULL;
 
 -- Index and FK will be added after population (safe order)
-CREATE INDEX IF NOT EXISTS idx_tenants_hsm_slot_id ON tenants(hsm_slot_id);
+CREATE INDEX idx_tenants_hsm_slot_id ON tenants(hsm_slot_id);
 
 -- 2) Alter crypto_keys: hsm_slot INT -> hsm_slot_id CHAR(36)
 ALTER TABLE crypto_keys
     ADD COLUMN hsm_slot_id CHAR(36) NULL;
-CREATE INDEX IF NOT EXISTS idx_crypto_keys_hsm_slot_id ON crypto_keys(hsm_slot_id);
+CREATE INDEX idx_crypto_keys_hsm_slot_id ON crypto_keys(hsm_slot_id);
 
 -- 3) Optional: If you have existing hsm_slots rows, populate mapping from integers
 -- Since this project is in development and DB can be re-created, we do not attempt automatic population here.

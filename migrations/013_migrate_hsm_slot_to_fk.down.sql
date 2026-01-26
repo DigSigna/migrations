@@ -10,12 +10,12 @@ SET FOREIGN_KEY_CHECKS = 0;
 DROP TRIGGER IF EXISTS trg_validate_crypto_key_before_insert;
 
 -- Drop foreign keys
-ALTER TABLE crypto_keys DROP FOREIGN KEY IF EXISTS fk_crypto_keys_hsm_slot_id;
-ALTER TABLE tenants DROP FOREIGN KEY IF EXISTS fk_tenants_hsm_slot_id;
+ALTER TABLE crypto_keys DROP FOREIGN KEY fk_crypto_keys_hsm_slot_id;
+ALTER TABLE tenants DROP FOREIGN KEY fk_tenants_hsm_slot_id;
 
 -- Drop new columns
-ALTER TABLE crypto_keys DROP COLUMN IF EXISTS hsm_slot_id;
-ALTER TABLE tenants DROP COLUMN IF EXISTS hsm_slot_id;
+ALTER TABLE crypto_keys DROP COLUMN hsm_slot_id;
+ALTER TABLE tenants DROP COLUMN hsm_slot_id;
 
 -- Recreate original integer columns (defaulting to 0)
 ALTER TABLE tenants ADD COLUMN hsm_slot INT NOT NULL DEFAULT 0;
