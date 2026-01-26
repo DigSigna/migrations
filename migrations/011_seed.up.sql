@@ -427,8 +427,7 @@ VALUES (
     'MANAGED',
     'professional',
     'active',
-    NULL,  -- MANAGED uses shared slot (slot_number=0); mapping to hsm_slots happens in migration 014
-    NULL,
+    NULL,  -- parent_tenant_id (NULL)
     '{"timezone": "America/Mexico_City", "locale": "es_MX", "logo_url": "https://celaya.gob.mx/logo.png"}'
 ) ON DUPLICATE KEY UPDATE 
     name = VALUES(name),
