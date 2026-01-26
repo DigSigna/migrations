@@ -6,61 +6,131 @@ USE digsigna;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
--- 1) Remove old triggers if they exist
-DROP TRIGGER IF EXISTS trg_aes_key_metadata_after_insert;
-DROP TRIGGER IF EXISTS trg_aes_key_metadata_after_update;
+-- 014: Add hsm_slot_id references to tenants and crypto_keys and populate from legacy integer hsm_slot
 
--- 2) Recreate aes_key_metadata with proper scoping (one metadata record per slot + version)
-DROP TABLE IF EXISTS aes_key_metadata;
-CREATE TABLE aes_key_metadata (
-    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    hsm_slot_id CHAR(36) NOT NULL,
-    version_id VARCHAR(10) NOT NULL,
-    active BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
-    updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    algorithm VARCHAR(50),
-    source VARCHAR(255),
-    description TEXT,
-    FOREIGN KEY (hsm_slot_id) REFERENCES hsm_slots(id) ON DELETE CASCADE,
-    UNIQUE KEY uk_aes_key_metadata_slot_version (hsm_slot_id, version_id),
-    INDEX idx_aes_key_metadata_slot (hsm_slot_id),
-    INDEX idx_aes_key_metadata_version (version_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- 1) Add columns
+ALTER TABLE tenants ADD COLUMN hsm_slot_id CHAR(36) NULL;
+CREATE INDEX idx_tenants_hsm_slot_id ON tenants(hsm_slot_id);
 
--- 3) Update hsm_slots to reference metadata by id instead of version string
--- Drop previous key_version_id column (which referenced version_id) and replace with key_metadata_id
-ALTER TABLE hsm_slots DROP COLUMN key_version_id;
-ALTER TABLE hsm_slots ADD COLUMN key_metadata_id CHAR(36) NULL;
-CREATE INDEX idx_hsm_slots_key_metadata ON hsm_slots(key_metadata_id);
-ALTER TABLE hsm_slots
-    ADD CONSTRAINT fk_hsm_slots_key_metadata FOREIGN KEY (key_metadata_id) REFERENCES aes_key_metadata(id) ON DELETE RESTRICT;
+ALTER TABLE crypto_keys ADD COLUMN hsm_slot_id CHAR(36) NULL;
+CREATE INDEX idx_crypto_keys_hsm_slot_id ON crypto_keys(hsm_slot_id);
 
--- 4) Create triggers that only deactivate other metadata rows for the same slot
-DROP TRIGGER IF EXISTS trg_aes_key_metadata_after_insert;
-CREATE TRIGGER trg_aes_key_metadata_after_insert
-AFTER INSERT ON aes_key_metadata
+-- 2) Populate hsm_slots from existing legacy tenants.hsm_slot values (create slot rows if missing)
+-- Insert missing slots (use empty encrypted_pin placeholder)
+INSERT INTO hsm_slots (id, label, slot_number, encrypted_pin, created_at)
+SELECT UUID(), CONCAT('slot-', CAST(src.hsm_slot AS CHAR)), src.hsm_slot, x'', CURRENT_TIMESTAMP(6)
+FROM (
+    SELECT DISTINCT hsm_slot FROM tenants WHERE hsm_slot IS NOT NULL
+) AS src
+LEFT JOIN hsm_slots hs ON hs.slot_number = src.hsm_slot
+WHERE hs.id IS NULL;
+
+-- 3) Map tenants and crypto_keys to slot IDs
+UPDATE tenants t
+JOIN hsm_slots hs ON hs.slot_number = t.hsm_slot
+SET t.hsm_slot_id = hs.id
+WHERE t.hsm_slot IS NOT NULL;
+
+UPDATE crypto_keys ck
+JOIN hsm_slots hs ON hs.slot_number = ck.hsm_slot
+SET ck.hsm_slot_id = hs.id
+WHERE ck.hsm_slot IS NOT NULL;
+
+-- 4) Add FK constraints
+ALTER TABLE tenants ADD CONSTRAINT fk_tenants_hsm_slot_id FOREIGN KEY (hsm_slot_id) REFERENCES hsm_slots(id) ON DELETE SET NULL;
+ALTER TABLE crypto_keys ADD CONSTRAINT fk_crypto_keys_hsm_slot_id FOREIGN KEY (hsm_slot_id) REFERENCES hsm_slots(id) ON DELETE SET NULL;
+
+-- 5) Cleanup legacy integer columns now that mapping and FKs exist
+-- Drop legacy hsm_slot INT columns from tenants and crypto_keys to avoid technical debt
+ALTER TABLE tenants DROP COLUMN IF EXISTS hsm_slot;
+ALTER TABLE crypto_keys DROP COLUMN IF EXISTS hsm_slot;
+
+-- 6) Replace PKI crypto_keys BEFORE INSERT trigger to use hsm_slot_id exclusively
+DROP TRIGGER IF EXISTS trg_validate_crypto_key_before_insert;
+CREATE TRIGGER trg_validate_crypto_key_before_insert
+BEFORE INSERT ON crypto_keys
 FOR EACH ROW
 BEGIN
-    IF NEW.active = TRUE THEN
-        UPDATE aes_key_metadata
-        SET active = FALSE
-        WHERE hsm_slot_id = NEW.hsm_slot_id AND id != NEW.id AND active = TRUE;
+    DECLARE parent_owner_type VARCHAR(20);
+    DECLARE parent_cert_level INT;
+    DECLARE tenant_mode VARCHAR(20);
+    DECLARE tenant_hsm_slot_id CHAR(36);
+    DECLARE parent_hsm_slot_id CHAR(36);
+
+    -- Obtener modo del tenant y su hsm_slot_id
+    SELECT mode, hsm_slot_id INTO tenant_mode, tenant_hsm_slot_id FROM tenants WHERE id = NEW.tenant_id;
+
+    -- Si tiene parent_key_id, validar jerarquía
+    IF NEW.parent_key_id IS NOT NULL THEN
+        SELECT owner_type, cert_level, hsm_slot_id
+        INTO parent_owner_type, parent_cert_level, parent_hsm_slot_id
+        FROM crypto_keys
+        WHERE id = NEW.parent_key_id;
+
+        IF parent_owner_type IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'La clave padre (parent_key_id) no existe';
+        END IF;
+
+        IF NEW.cert_level != (parent_cert_level + 1) THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'cert_level de la clave debe ser secuencial (padre + 1)';
+        END IF;
+
+        IF parent_owner_type = 'USER' THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Una clave de usuario no puede ser padre de otra clave';
+        END IF;
+
+        -- Para tenants MANAGED, exigir que el parent root esté en slot_number = 0
+        IF tenant_mode = 'MANAGED' AND NEW.cert_level = 1 THEN
+            IF NOT EXISTS (
+                SELECT 1 FROM crypto_keys pk
+                JOIN hsm_slots hs ON pk.hsm_slot_id = hs.id
+                WHERE pk.id = NEW.parent_key_id
+                  AND pk.cert_level = 0
+                  AND pk.owner_type = 'TENANT'
+                  AND hs.slot_number = 0
+            ) THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Tenant MANAGED debe tener CA bajo DigSigna Platform Root (slot 0)';
+            END IF;
+        END IF;
+    ELSE
+        -- Sin parent_key_id, debe ser root (cert_level=0) y sólo TENANT
+        IF NEW.cert_level != 0 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Solo claves root (cert_level=0) pueden no tener parent_key_id';
+        END IF;
+
+        IF NEW.owner_type != 'TENANT' THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Solo el TENANT puede tener claves root (cert_level=0)';
+        END IF;
+
+        -- Si tenant es INDEPENDENT, exigir hsm_slot_id que no apunte a slot_number = 0
+        IF tenant_mode = 'INDEPENDENT' THEN
+            IF NEW.hsm_slot_id IS NULL OR EXISTS (SELECT 1 FROM hsm_slots WHERE id = NEW.hsm_slot_id AND slot_number = 0) THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Tenant INDEPENDENT debe usar hsm_slot dedicado (> 0)';
+            END IF;
+        END IF;
     END IF;
-END;
 
-DROP TRIGGER IF EXISTS trg_aes_key_metadata_after_update;
-CREATE TRIGGER trg_aes_key_metadata_after_update
-AFTER UPDATE ON aes_key_metadata
-FOR EACH ROW
-BEGIN
-    IF NEW.active = TRUE THEN
-        UPDATE aes_key_metadata
-        SET active = FALSE
-        WHERE hsm_slot_id = NEW.hsm_slot_id AND id != NEW.id AND active = TRUE;
+    IF NEW.cert_level < 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'cert_level no puede ser negativo';
+    END IF;
+
+    -- Para tenants MANAGED, la clave debe apuntar a slot_number = 0
+    IF tenant_mode = 'MANAGED' THEN
+        IF NEW.hsm_slot_id IS NULL OR NOT EXISTS (SELECT 1 FROM hsm_slots WHERE id = NEW.hsm_slot_id AND slot_number = 0) THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Claves de tenant MANAGED deben usar slot compartido (slot 0)';
+        END IF;
     END IF;
 END;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
-SELECT 'Migration 014 applied: aes_key_metadata scoped per hsm_slot and hsm_slots updated' AS message;
+SELECT 'Migration 014 applied: tenants and crypto_keys now reference hsm_slots via hsm_slot_id and legacy hsm_slot columns removed' AS message;

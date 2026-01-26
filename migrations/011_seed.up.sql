@@ -24,8 +24,8 @@ ON DUPLICATE KEY UPDATE
     description = VALUES(description),
     module = VALUES(module);
 
--- 2. Tenant Platform (MANAGED - modo=MANAGED, hsm_slot=0)
-INSERT INTO tenants (id, name, contact_email, mode, plan_type, status, hsm_slot, parent_tenant_id, configuration)
+-- 2. Tenant Platform (MANAGED - modo=MANAGED, shared slot_number=0)
+INSERT INTO tenants (id, name, contact_email, mode, plan_type, status, parent_tenant_id, configuration)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
     'DigSigna Platform',
@@ -33,8 +33,7 @@ VALUES (
     'MANAGED',
     'enterprise',
     'active',
-    0,
-    NULL,  -- Es el tenant raíz
+    NULL,  -- Es el tenant raíz (hsm_slot legacy removed; mapping to hsm_slots happens in migration 014)
     '{"max_users": -1, "max_keys": -1, "features": ["hsm", "audit", "multi_tenant", "pki_hierarchy"]}'
 ) ON DUPLICATE KEY UPDATE 
     name = VALUES(name),
@@ -42,7 +41,6 @@ VALUES (
     mode = VALUES(mode),
     plan_type = VALUES(plan_type),
     status = VALUES(status),
-    hsm_slot = VALUES(hsm_slot),
     configuration = VALUES(configuration);
 
 -- 3. Roles para el tenant por defecto (ahora usamos valores fijos)
@@ -420,7 +418,7 @@ VALUES (
 -- 19. Tenant: Municipio de Celaya (MANAGED mode)
 INSERT INTO tenants (
     id, name, contact_email, mode, plan_type, status, 
-    hsm_slot, parent_tenant_id, configuration
+    parent_tenant_id, configuration
 )
 VALUES (
     '20000000-2000-2000-2000-000000000001',
@@ -429,7 +427,7 @@ VALUES (
     'MANAGED',
     'professional',
     'active',
-    0,  -- MANAGED usa slot compartido 0
+    NULL,  -- MANAGED uses shared slot (slot_number=0); mapping to hsm_slots happens in migration 014
     NULL,
     '{"timezone": "America/Mexico_City", "locale": "es_MX", "logo_url": "https://celaya.gob.mx/logo.png"}'
 ) ON DUPLICATE KEY UPDATE 

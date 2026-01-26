@@ -38,7 +38,8 @@ CREATE TABLE crypto_keys (
     
     -- HSM y seguridad
     is_hardware_backed BOOLEAN DEFAULT TRUE,
-    hsm_slot INT,
+    -- Referencia al slot HSM en la nueva tabla hsm_slots (nullable; FK se añade en migraciones posteriores)
+    hsm_slot_id CHAR(36),
     
     -- Estado
     is_active BOOLEAN DEFAULT TRUE,
@@ -59,6 +60,7 @@ CREATE TABLE crypto_keys (
     INDEX idx_crypto_keys_owner (owner_type, owner_id),
     INDEX idx_crypto_keys_parent (parent_key_id),
     INDEX idx_crypto_keys_hierarchy (tenant_id, cert_level),
+    INDEX idx_crypto_keys_hsm_slot_id (hsm_slot_id),
     INDEX idx_crypto_keys_algorithm (algorithm, key_size)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

@@ -6,22 +6,14 @@ USE digsigna;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
--- Drop updated trigger
-DROP TRIGGER IF EXISTS trg_validate_crypto_key_before_insert;
+-- Drop triggers and FK from hsm_slots
+DROP TRIGGER IF EXISTS trg_aes_key_metadata_after_update;
+DROP TRIGGER IF EXISTS trg_aes_key_metadata_after_insert;
 
--- Drop foreign keys
-ALTER TABLE crypto_keys DROP FOREIGN KEY fk_crypto_keys_hsm_slot_id;
-ALTER TABLE tenants DROP FOREIGN KEY fk_tenants_hsm_slot_id;
+ALTER TABLE hsm_slots DROP FOREIGN KEY fk_hsm_slots_key_metadata;
 
--- Drop new columns
-ALTER TABLE crypto_keys DROP COLUMN hsm_slot_id;
-ALTER TABLE tenants DROP COLUMN hsm_slot_id;
-
--- Recreate original integer columns (defaulting to 0)
-ALTER TABLE tenants ADD COLUMN hsm_slot INT NOT NULL DEFAULT 0;
-ALTER TABLE crypto_keys ADD COLUMN hsm_slot INT NOT NULL DEFAULT 0;
-
--- Note: original trigger definitions should be reapplied from 005_pki_triggers.up.sql if needed
+-- Drop aes_key_metadata table
+DROP TABLE IF EXISTS aes_key_metadata;
 
 SET FOREIGN_KEY_CHECKS = 1;
 

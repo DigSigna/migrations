@@ -105,7 +105,7 @@ Configuración adicional de usuarios y permisos
 #### **011_seed.up/down.sql**
 Datos iniciales (seeds):
 - Permisos del sistema
-- Tenant plataforma (MANAGED, hsm_slot=0)
+ - Tenant plataforma (MANAGED, shared slot_number=0)
 - Roles: Tenant Administrator, Organization Manager, Signing User
 - Usuarios de prueba
 - Cuotas iniciales
