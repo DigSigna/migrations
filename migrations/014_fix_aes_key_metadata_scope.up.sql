@@ -30,7 +30,7 @@ CREATE TABLE aes_key_metadata (
 
 -- 3) Update hsm_slots to reference metadata by id instead of version string
 -- Drop previous key_version_id column (which referenced version_id) and replace with key_metadata_id
-ALTER TABLE hsm_slots DROP COLUMN IF EXISTS key_version_id;
+ALTER TABLE hsm_slots DROP COLUMN key_version_id;
 ALTER TABLE hsm_slots ADD COLUMN key_metadata_id CHAR(36) NULL;
 CREATE INDEX idx_hsm_slots_key_metadata ON hsm_slots(key_metadata_id);
 ALTER TABLE hsm_slots
