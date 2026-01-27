@@ -39,6 +39,10 @@ SET ck.hsm_slot_id = hs.id
 WHERE t.hsm_slot_id IS NOT NULL;
 
 -- 3.5) Seed: create an HSM slot for the first tenant and initial AES metadata (idempotent)
+-- Drop AES metadata triggers temporarily to avoid trigger-side table-modification conflicts
+DROP TRIGGER IF EXISTS trg_aes_key_metadata_after_insert;
+DROP TRIGGER IF EXISTS trg_aes_key_metadata_after_update;
+
 -- This will:
 --  - pick the earliest-created tenant (if any), use its legacy hsm_slot integer (or 0 if NULL)
 --  - insert an hsm_slots row for that slot_number if missing
@@ -81,6 +85,31 @@ UPDATE hsm_slots SET key_metadata_id = @seed_meta_id WHERE id = @seed_hsm_slot_i
 
 -- Point the first tenant to this hsm_slot_id
 UPDATE tenants SET hsm_slot_id = @seed_hsm_slot_id WHERE id = @first_tenant_id AND @seed_hsm_slot_id IS NOT NULL;
+
+-- Recreate AES metadata triggers (same behavior as defined in migration 013)
+DROP TRIGGER IF EXISTS trg_aes_key_metadata_after_insert;
+CREATE TRIGGER trg_aes_key_metadata_after_insert
+AFTER INSERT ON aes_key_metadata
+FOR EACH ROW
+BEGIN
+    IF NEW.active = TRUE THEN
+        UPDATE aes_key_metadata
+        SET active = FALSE
+        WHERE hsm_slot_id = NEW.hsm_slot_id AND id != NEW.id AND active = TRUE;
+    END IF;
+END;
+
+DROP TRIGGER IF EXISTS trg_aes_key_metadata_after_update;
+CREATE TRIGGER trg_aes_key_metadata_after_update
+AFTER UPDATE ON aes_key_metadata
+FOR EACH ROW
+BEGIN
+    IF NEW.active = TRUE THEN
+        UPDATE aes_key_metadata
+        SET active = FALSE
+        WHERE hsm_slot_id = NEW.hsm_slot_id AND id != NEW.id AND active = TRUE;
+    END IF;
+END;
 
 -- 4) Add FK constraints
 ALTER TABLE tenants ADD CONSTRAINT fk_tenants_hsm_slot_id FOREIGN KEY (hsm_slot_id) REFERENCES hsm_slots(id) ON DELETE SET NULL;
