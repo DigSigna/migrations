@@ -38,6 +38,42 @@ JOIN hsm_slots hs ON hs.id = t.hsm_slot_id
 SET ck.hsm_slot_id = hs.id
 WHERE t.hsm_slot_id IS NOT NULL;
 
+-- 3.5) Seed: create an HSM slot for the first tenant and initial AES metadata (idempotent)
+-- This will:
+--  - pick the earliest-created tenant (if any), use its legacy hsm_slot integer (or 0 if NULL)
+--  - insert an hsm_slots row for that slot_number if missing
+--  - insert an aes_key_metadata row (version 'v1') for that slot if missing and mark it active
+--  - link hsm_slots.key_metadata_id -> aes_key_metadata.id and set tenants.hsm_slot_id for the tenant
+
+SET @first_tenant_id = (SELECT id FROM tenants ORDER BY created_at LIMIT 1);
+SET @first_tenant_slot = (SELECT hsm_slot FROM tenants ORDER BY created_at LIMIT 1);
+SET @first_tenant_slot = IFNULL(@first_tenant_slot, 0);
+
+-- Only proceed if there is at least one tenant
+INSERT INTO hsm_slots (id, label, slot_number, encrypted_pin, created_at)
+SELECT UUID(), CONCAT('slot-', CAST(@first_tenant_slot AS CHAR)), @first_tenant_slot, x'', CURRENT_TIMESTAMP(6)
+FROM DUAL
+WHERE @first_tenant_id IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM hsm_slots WHERE slot_number = @first_tenant_slot);
+
+-- Obtain the hsm_slot id we just ensured exists
+SET @seed_hsm_slot_id = (SELECT id FROM hsm_slots WHERE slot_number = @first_tenant_slot LIMIT 1);
+
+-- Insert initial AES metadata for that slot (version 'v1') if missing
+INSERT INTO aes_key_metadata (id, hsm_slot_id, version_id, active, algorithm, source, description, created_at)
+SELECT UUID(), @seed_hsm_slot_id, 'v1', TRUE, 'AES-GCM', 'migrated-seed', 'Initial AES metadata for slot', CURRENT_TIMESTAMP(6)
+FROM DUAL
+WHERE @first_tenant_id IS NOT NULL
+    AND @seed_hsm_slot_id IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM aes_key_metadata WHERE hsm_slot_id = @seed_hsm_slot_id AND version_id = 'v1');
+
+-- Link hsm_slots.key_metadata_id to the metadata row
+SET @seed_meta_id = (SELECT id FROM aes_key_metadata WHERE hsm_slot_id = @seed_hsm_slot_id AND version_id = 'v1' LIMIT 1);
+UPDATE hsm_slots SET key_metadata_id = @seed_meta_id WHERE id = @seed_hsm_slot_id AND @seed_meta_id IS NOT NULL;
+
+-- Point the first tenant to this hsm_slot_id
+UPDATE tenants SET hsm_slot_id = @seed_hsm_slot_id WHERE id = @first_tenant_id AND @seed_hsm_slot_id IS NOT NULL;
+
 -- 4) Add FK constraints
 ALTER TABLE tenants ADD CONSTRAINT fk_tenants_hsm_slot_id FOREIGN KEY (hsm_slot_id) REFERENCES hsm_slots(id) ON DELETE SET NULL;
 ALTER TABLE crypto_keys ADD CONSTRAINT fk_crypto_keys_hsm_slot_id FOREIGN KEY (hsm_slot_id) REFERENCES hsm_slots(id) ON DELETE SET NULL;
