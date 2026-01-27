@@ -15,10 +15,8 @@ CREATE INDEX idx_tenants_hsm_slot_id ON tenants(hsm_slot_id);
 -- crypto_keys already declares `hsm_slot_id` in earlier migration (002).
 -- If not present, it should be added in a prior migration. We avoid adding it again here to prevent duplicate column errors.
 
--- 2) Populate hsm_slots from existing legacy tenants.hsm_slot values (create slot rows if missing)
--- Insert missing slots (use empty encrypted_pin placeholder)
-INSERT INTO hsm_slots (id, label, slot_number, encrypted_pin, created_at)
-SELECT UUID(), CONCAT('slot-', CAST(src.hsm_slot AS CHAR)), src.hsm_slot, x'', CURRENT_TIMESTAMP(6)
+INSERT INTO hsm_slots (id, label, slot_number, pin_iv, pin_ciphertext, pin_auth_tag, created_at)
+SELECT UUID(), CONCAT('slot-', CAST(src.hsm_slot AS CHAR)), src.hsm_slot, x'', x'', x'', CURRENT_TIMESTAMP(6)
 FROM (
     SELECT DISTINCT hsm_slot FROM tenants WHERE hsm_slot IS NOT NULL
 ) AS src
@@ -53,9 +51,8 @@ SET @first_tenant_id = (SELECT id FROM tenants ORDER BY created_at LIMIT 1);
 SET @first_tenant_slot = (SELECT hsm_slot FROM tenants ORDER BY created_at LIMIT 1);
 SET @first_tenant_slot = IFNULL(@first_tenant_slot, 0);
 
--- Only proceed if there is at least one tenant
-INSERT INTO hsm_slots (id, label, slot_number, encrypted_pin, created_at)
-SELECT UUID(), CONCAT('slot-', CAST(@first_tenant_slot AS CHAR)), @first_tenant_slot, x'', CURRENT_TIMESTAMP(6)
+INSERT INTO hsm_slots (id, label, slot_number, pin_iv, pin_ciphertext, pin_auth_tag, created_at)
+SELECT UUID(), CONCAT('slot-', CAST(@first_tenant_slot AS CHAR)), @first_tenant_slot, x'', x'', x'', CURRENT_TIMESTAMP(6)
 FROM DUAL
 WHERE @first_tenant_id IS NOT NULL
     AND NOT EXISTS (SELECT 1 FROM hsm_slots WHERE slot_number = @first_tenant_slot);
@@ -69,8 +66,8 @@ SET @seed_hsm_slot_id = (SELECT id FROM hsm_slots WHERE slot_number = @first_ten
 SET @seed_meta_id = NULL;
 SELECT id INTO @seed_meta_id FROM aes_key_metadata WHERE hsm_slot_id = @seed_hsm_slot_id AND version_id = 'v1' LIMIT 1;
 
-INSERT INTO aes_key_metadata (id, hsm_slot_id, version_id, active, algorithm, source, description, created_at)
-SELECT UUID(), @seed_hsm_slot_id, 'v1', TRUE, 'AES-GCM', 'migrated-seed', 'Initial AES metadata for slot', CURRENT_TIMESTAMP(6)
+INSERT INTO aes_key_metadata (id, hsm_slot_id, version_id, active, algorithm, source, description, wrapped_data_key, wrap_key_version, last_rewrap_at, created_at)
+SELECT UUID(), @seed_hsm_slot_id, 'v1', TRUE, 'AES-GCM', 'migrated-seed', 'Initial AES metadata for slot', NULL, 'master-v1', NULL, CURRENT_TIMESTAMP(6)
 FROM DUAL
 WHERE @first_tenant_id IS NOT NULL
     AND @seed_hsm_slot_id IS NOT NULL

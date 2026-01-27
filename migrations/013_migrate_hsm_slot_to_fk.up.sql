@@ -16,12 +16,21 @@ CREATE TABLE aes_key_metadata (
     algorithm VARCHAR(50),
     source VARCHAR(255),
     description TEXT,
+    -- Wrapped data key for the slot: a random data key encrypted (wrapped) by the master AES key
+    wrapped_data_key VARBINARY(2048) NULL,
+    -- Version of the master key used to wrap `wrapped_data_key`. Distinct from `version_id` which
+    -- denotes the metadata/version of the slot itself. Make NOT NULL with a sensible default.
+    wrap_key_version VARCHAR(50) NOT NULL DEFAULT 'master-v1',
+    -- Timestamp of last rewrap operation when the wrapped_data_key was re-encrypted with a new master key
+    last_rewrap_at TIMESTAMP(6) NULL,
     created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
     updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     FOREIGN KEY (hsm_slot_id) REFERENCES hsm_slots(id) ON DELETE CASCADE,
     UNIQUE KEY uk_aes_key_metadata_slot_version (hsm_slot_id, version_id),
     INDEX idx_aes_key_metadata_slot (hsm_slot_id),
-    INDEX idx_aes_key_metadata_version (version_id)
+    INDEX idx_aes_key_metadata_version (version_id),
+    INDEX idx_aes_key_metadata_wrap_version (wrap_key_version),
+    INDEX idx_aes_key_metadata_last_rewrap (last_rewrap_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2) Add FK from hsm_slots.key_metadata_id to aes_key_metadata.id
