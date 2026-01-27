@@ -44,8 +44,30 @@ ALTER TABLE crypto_keys ADD CONSTRAINT fk_crypto_keys_hsm_slot_id FOREIGN KEY (h
 
 -- 5) Cleanup legacy integer columns now that mapping and FKs exist
 -- Drop legacy hsm_slot INT columns from tenants and crypto_keys to avoid technical debt
-ALTER TABLE tenants DROP COLUMN IF EXISTS hsm_slot;
-ALTER TABLE crypto_keys DROP COLUMN IF EXISTS hsm_slot;
+-- Use conditional prepared statements to avoid 'IF EXISTS' syntax which may not be supported
+-- Check tenants.hsm_slot and drop it only if present
+SET @stmt = (
+    SELECT IF(
+        (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'hsm_slot') > 0,
+        'ALTER TABLE tenants DROP COLUMN hsm_slot',
+        'SELECT 1'
+    )
+);
+PREPARE conditional_stmt FROM @stmt;
+EXECUTE conditional_stmt;
+DEALLOCATE PREPARE conditional_stmt;
+
+-- Check crypto_keys.hsm_slot and drop it only if present
+SET @stmt = (
+    SELECT IF(
+        (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'crypto_keys' AND COLUMN_NAME = 'hsm_slot') > 0,
+        'ALTER TABLE crypto_keys DROP COLUMN hsm_slot',
+        'SELECT 1'
+    )
+);
+PREPARE conditional_stmt FROM @stmt;
+EXECUTE conditional_stmt;
+DEALLOCATE PREPARE conditional_stmt;
 
 -- 6) Replace PKI crypto_keys BEFORE INSERT trigger to use hsm_slot_id exclusively
 DROP TRIGGER IF EXISTS trg_validate_crypto_key_before_insert;

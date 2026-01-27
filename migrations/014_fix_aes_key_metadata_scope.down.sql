@@ -20,7 +20,17 @@ ALTER TABLE tenants ADD COLUMN hsm_slot INT NULL;
 CREATE INDEX idx_tenants_hsm_slot ON tenants(hsm_slot);
 
 -- Drop only the tenants.hsm_slot_id column which was added in this migration
-ALTER TABLE tenants DROP COLUMN IF EXISTS hsm_slot_id;
+-- Use conditional prepared statement to avoid IF EXISTS syntax errors on some MySQL versions
+SET @stmt = (
+	SELECT IF(
+		(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'hsm_slot_id') > 0,
+		'ALTER TABLE tenants DROP COLUMN hsm_slot_id',
+		'SELECT 1'
+	)
+);
+PREPARE conditional_stmt FROM @stmt;
+EXECUTE conditional_stmt;
+DEALLOCATE PREPARE conditional_stmt;
 
 -- Restore previous trigger that used legacy hsm_slot INT semantics
 DROP TRIGGER IF EXISTS trg_validate_crypto_key_before_insert;
