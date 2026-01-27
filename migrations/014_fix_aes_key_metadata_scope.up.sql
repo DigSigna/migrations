@@ -60,15 +60,23 @@ WHERE @first_tenant_id IS NOT NULL
 SET @seed_hsm_slot_id = (SELECT id FROM hsm_slots WHERE slot_number = @first_tenant_slot LIMIT 1);
 
 -- Insert initial AES metadata for that slot (version 'v1') if missing
+-- To avoid trigger conflict (the aes_key_metadata triggers update the same table),
+-- first read any existing metadata id into @seed_meta_id, then conditionally insert only when NULL.
+SET @seed_meta_id = NULL;
+SELECT id INTO @seed_meta_id FROM aes_key_metadata WHERE hsm_slot_id = @seed_hsm_slot_id AND version_id = 'v1' LIMIT 1;
+
 INSERT INTO aes_key_metadata (id, hsm_slot_id, version_id, active, algorithm, source, description, created_at)
 SELECT UUID(), @seed_hsm_slot_id, 'v1', TRUE, 'AES-GCM', 'migrated-seed', 'Initial AES metadata for slot', CURRENT_TIMESTAMP(6)
 FROM DUAL
 WHERE @first_tenant_id IS NOT NULL
     AND @seed_hsm_slot_id IS NOT NULL
-    AND NOT EXISTS (SELECT 1 FROM aes_key_metadata WHERE hsm_slot_id = @seed_hsm_slot_id AND version_id = 'v1');
+    AND @seed_meta_id IS NULL;
+
+-- Obtain the metadata id (existing or newly created)
+SET @seed_meta_id = NULL;
+SELECT id INTO @seed_meta_id FROM aes_key_metadata WHERE hsm_slot_id = @seed_hsm_slot_id AND version_id = 'v1' LIMIT 1;
 
 -- Link hsm_slots.key_metadata_id to the metadata row
-SET @seed_meta_id = (SELECT id FROM aes_key_metadata WHERE hsm_slot_id = @seed_hsm_slot_id AND version_id = 'v1' LIMIT 1);
 UPDATE hsm_slots SET key_metadata_id = @seed_meta_id WHERE id = @seed_hsm_slot_id AND @seed_meta_id IS NOT NULL;
 
 -- Point the first tenant to this hsm_slot_id
