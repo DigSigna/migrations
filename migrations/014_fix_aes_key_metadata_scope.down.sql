@@ -12,15 +12,15 @@ SET FOREIGN_KEY_CHECKS = 0;
 ALTER TABLE crypto_keys DROP FOREIGN KEY fk_crypto_keys_hsm_slot_id;
 ALTER TABLE tenants DROP FOREIGN KEY fk_tenants_hsm_slot_id;
 
--- Recreate legacy integer columns to restore previous state
-ALTER TABLE crypto_keys ADD COLUMN hsm_slot INT NULL;
-CREATE INDEX idx_crypto_keys_hsm_slot ON crypto_keys(hsm_slot);
-
+-- Recreate legacy integer columns for tenants to restore previous state
+-- Note: `crypto_keys.hsm_slot_id` is managed by earlier migration(s) (e.g. 002).
+-- We should not drop or recreate crypto_keys.hsm_slot_id here to avoid removing a column
+-- that may have been introduced by another migration. Only restore tenant legacy column.
 ALTER TABLE tenants ADD COLUMN hsm_slot INT NULL;
 CREATE INDEX idx_tenants_hsm_slot ON tenants(hsm_slot);
 
-ALTER TABLE crypto_keys DROP COLUMN hsm_slot_id;
-ALTER TABLE tenants DROP COLUMN hsm_slot_id;
+-- Drop only the tenants.hsm_slot_id column which was added in this migration
+ALTER TABLE tenants DROP COLUMN IF EXISTS hsm_slot_id;
 
 -- Restore previous trigger that used legacy hsm_slot INT semantics
 DROP TRIGGER IF EXISTS trg_validate_crypto_key_before_insert;
