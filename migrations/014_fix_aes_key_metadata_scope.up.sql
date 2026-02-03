@@ -89,10 +89,13 @@ CREATE TRIGGER trg_aes_key_metadata_after_insert
 AFTER INSERT ON aes_key_metadata
 FOR EACH ROW
 BEGIN
-    IF NEW.active = TRUE THEN
-        UPDATE aes_key_metadata
-        SET active = FALSE
-        WHERE hsm_slot_id = NEW.hsm_slot_id AND id != NEW.id AND active = TRUE;
+    -- allow controlled suppression of trigger logic from the session by setting @skip_aes_triggers = 1
+    IF COALESCE(@skip_aes_triggers, 0) = 0 THEN
+        IF NEW.active = TRUE THEN
+            UPDATE aes_key_metadata
+            SET active = FALSE
+            WHERE hsm_slot_id = NEW.hsm_slot_id AND id != NEW.id AND active = TRUE;
+        END IF;
     END IF;
 END;
 
@@ -101,10 +104,13 @@ CREATE TRIGGER trg_aes_key_metadata_after_update
 AFTER UPDATE ON aes_key_metadata
 FOR EACH ROW
 BEGIN
-    IF NEW.active = TRUE THEN
-        UPDATE aes_key_metadata
-        SET active = FALSE
-        WHERE hsm_slot_id = NEW.hsm_slot_id AND id != NEW.id AND active = TRUE;
+    -- allow controlled suppression of trigger logic from the session by setting @skip_aes_triggers = 1
+    IF COALESCE(@skip_aes_triggers, 0) = 0 THEN
+        IF NEW.active = TRUE THEN
+            UPDATE aes_key_metadata
+            SET active = FALSE
+            WHERE hsm_slot_id = NEW.hsm_slot_id AND id != NEW.id AND active = TRUE;
+        END IF;
     END IF;
 END;
 
