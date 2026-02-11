@@ -12,7 +12,7 @@ CREATE TABLE hsm_slots (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     label VARCHAR(255) NOT NULL,
     slot_number INT NOT NULL,
-    is_temporary_id BOOLEAN NOT NULL DEFAULT FALSE,
+    is_temporary_id BOOLEAN NOT NULL DEFAULT TRUE,
     -- Split AES-GCM encrypted PIN into its components: IV (nonce), ciphertext and auth tag
     pin_iv VARBINARY(12) NULL COMMENT 'IV/nonce for AES-GCM (12 bytes)',
     pin_ciphertext VARBINARY(1024) NULL COMMENT 'AES-GCM ciphertext of the PIN',
