@@ -16,7 +16,7 @@ CREATE INDEX idx_tenants_hsm_slot_id ON tenants(hsm_slot_id);
 -- If not present, it should be added in a prior migration. We avoid adding it again here to prevent duplicate column errors.
 
 INSERT INTO hsm_slots (id, label, slot_number, pin_iv, pin_ciphertext, pin_auth_tag, created_at)
-SELECT UUID(), CONCAT('slot-', CAST(src.hsm_slot AS CHAR)), src.hsm_slot, x'', x'', x'', CURRENT_TIMESTAMP(6)
+SELECT UUID(),'digsigna-token', src.hsm_slot, x'', x'', x'', CURRENT_TIMESTAMP(6)
 FROM (
     SELECT DISTINCT hsm_slot FROM tenants WHERE hsm_slot IS NOT NULL
 ) AS src
